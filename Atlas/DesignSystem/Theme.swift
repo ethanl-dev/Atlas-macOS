@@ -70,8 +70,6 @@ enum AtlasFont {
     static let title   = Font.system(size: 22, weight: .semibold, design: .default)
     static let heading = Font.system(size: 17, weight: .semibold, design: .default)
     static let body    = Font.system(size: 14, weight: .regular,  design: .default)
-    /// 长文写作/阅读正文（详情卡档案内容等）——比 chrome 用的 body 大 2pt，读写更舒适。
-    static let bodyLarge = Font.system(size: 16, weight: .regular, design: .default)
     static let label   = Font.system(size: 13, weight: .medium,   design: .default)
     static let caption = Font.system(size: 11, weight: .regular,  design: .default)
     /// 技术元数据：ID、坐标、版本、时间戳

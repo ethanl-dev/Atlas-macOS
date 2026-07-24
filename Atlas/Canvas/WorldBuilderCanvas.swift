@@ -31,6 +31,11 @@ struct WorldBuilderCanvas: View {
     @State private var marqueeCurrent: CGPoint?
     @State private var zoomAnchor: CGFloat?
     @State private var scrollMonitor: Any?
+    @State private var keyMonitor: Any?
+
+    @StateObject private var organizer = CanvasOrganizer()
+    @State private var commandMode: CommandMode = .place
+    private enum CommandMode { case place, organize }
 
     init(model: AtlasAppModel, mode: String = "create", worldName: String = "未命名世界", onExit: @escaping () -> Void) {
         _model = ObservedObject(wrappedValue: model)
@@ -51,6 +56,9 @@ struct WorldBuilderCanvas: View {
 
     private var canvasStage: some View {
         GeometryReader { proxy in
+            let timeline = store.projection == .timeline
+                ? TimelineLayout.make(events: store.objects.filter { $0.kind == .event })
+                : TimelineLayout()
             ZStack {
                 AtlasCanvasBackground()
                     .allowsHitTesting(false)
@@ -67,13 +75,17 @@ struct WorldBuilderCanvas: View {
 
                 if store.projection == .relation {
                     relationLayer(in: proxy.size)
+                    relationChips(in: proxy.size)
                 }
 
                 if store.projection == .timeline {
-                    timelineAxis(in: proxy.size)
+                    timelineAxis(timeline)
                 }
 
                 ForEach(store.objects) { object in
+                    let onTimeline = store.projection == .timeline
+                    let dimmed = onTimeline && object.kind != .event
+                    let world = (onTimeline ? timeline.positions[object.id] : nil) ?? object.position
                     ObjectCard(
                         object: object,
                         scale: scale,
@@ -81,9 +93,19 @@ struct WorldBuilderCanvas: View {
                         store: store,
                         onSelect: { select(object.id) },
                         onExpand: { openMapEditor(object.id) },
-                        pan: pan
+                        pan: pan,
+                        layoutLocked: onTimeline,
+                        dimmed: dimmed
                     )
-                    .position(worldToScreen(object.position))
+                    .position(worldToScreen(world))
+                    .opacity(dimmed ? 0.12 : 1)
+                    .allowsHitTesting(!dimmed)
+                    .animation(.spring(response: 0.45, dampingFraction: 0.82), value: onTimeline)
+                    .transition(.scale(scale: 0.92).combined(with: .opacity))
+                }
+
+                if let plan = organizer.plan {
+                    organizeGhostLayer(plan)
                 }
 
                 if let rect = marqueeScreenRect {
@@ -96,7 +118,7 @@ struct WorldBuilderCanvas: View {
                 }
 
                 if store.objects.isEmpty {
-                    emptyHint
+                    TemplateStart(store: store)
                 }
             }
             .coordinateSpace(.named("canvas"))
@@ -125,8 +147,9 @@ struct WorldBuilderCanvas: View {
                     didCenter = true
                 }
                 startScrollMonitor()
+                startKeyMonitor()
             }
-            .onDisappear { stopScrollMonitor() }
+            .onDisappear { stopScrollMonitor(); stopKeyMonitor() }
             .onChange(of: proxy.size) { _, newValue in viewSize = newValue }
         }
     }
@@ -155,40 +178,141 @@ struct WorldBuilderCanvas: View {
         .allowsHitTesting(false)
     }
 
+    // 关系连线：粗细/亮度随强度；提议中的关系用虚线；选中的关系提亮。
     private func relationLayer(in size: CGSize) -> some View {
         Canvas { context, _ in
             for relation in store.relations {
                 guard let a = store.objects.first(where: { $0.id == relation.sourceID }),
                       let b = store.objects.first(where: { $0.id == relation.targetID }) else { continue }
+                let selected = store.selectedRelationID == relation.id
                 var path = Path()
                 path.move(to: worldToScreen(a.position))
                 path.addLine(to: worldToScreen(b.position))
-                context.stroke(path, with: .color(.white.opacity(0.22)), lineWidth: 1)
+                let op = selected ? 0.9 : relation.strength.opacity
+                let width = (selected ? relation.strength.lineWidth + 0.8 : relation.strength.lineWidth)
+                let style: StrokeStyle = relation.proposed
+                    ? .init(lineWidth: relation.strength.lineWidth, dash: [6, 5])
+                    : .init(lineWidth: width, lineCap: .round)
+                context.stroke(path, with: .color(.white.opacity(op)), style: style)
             }
         }
         .allowsHitTesting(false)
     }
 
-    private func timelineAxis(in size: CGSize) -> some View {
-        Canvas { context, canvasSize in
-            var path = Path()
-            let y = canvasSize.height * 0.5
-            path.move(to: CGPoint(x: 80, y: y))
-            path.addLine(to: CGPoint(x: canvasSize.width - 80, y: y))
-            context.stroke(path, with: .color(.white.opacity(0.14)),
-                           style: .init(lineWidth: 1, dash: [2, 6]))
+    // 关系中点 chip：可点选进入关系详情卡。有长文叙事的关系带段落图标。
+    @ViewBuilder
+    private func relationChips(in size: CGSize) -> some View {
+        ForEach(store.relations) { relation in
+            if let a = store.objects.first(where: { $0.id == relation.sourceID }),
+               let b = store.objects.first(where: { $0.id == relation.targetID }) {
+                let mid = CGPoint(x: (a.position.x + b.position.x) / 2,
+                                  y: (a.position.y + b.position.y) / 2)
+                RelationChip(relation: relation,
+                             selected: store.selectedRelationID == relation.id) {
+                    selectRelation(relation.id)
+                }
+                .position(worldToScreen(mid))
+            }
         }
-        .allowsHitTesting(false)
     }
 
-    private var emptyHint: some View {
-        VStack(spacing: AtlasSpacing.m) {
-            Text("一块空白的世界")
-                .font(AtlasFont.serifTitle)
-                .foregroundStyle(AtlasColor.textSecondary)
-            Text("右键画布任意处新建卡片，或在下面写一句话——雾港、守夜人、一场夜航……")
-                .font(AtlasFont.body)
-                .foregroundStyle(AtlasColor.textTertiary)
+    // Agent 整理方案的幽灵预览：提议新位置的半透明卡 + 移动轨迹 + 提议关系（虚线）。
+    @ViewBuilder
+    private func organizeGhostLayer(_ plan: OrganizePlan) -> some View {
+        ZStack {
+            Canvas { ctx, _ in
+                for (id, target) in plan.ghostPositions {
+                    guard let obj = store.objects.first(where: { $0.id == id }) else { continue }
+                    var p = Path()
+                    p.move(to: worldToScreen(obj.position))
+                    p.addLine(to: worldToScreen(target))
+                    ctx.stroke(p, with: .color(.white.opacity(0.22)),
+                               style: .init(lineWidth: 1, dash: [3, 4]))
+                }
+                for link in plan.proposedLinks {
+                    guard let a = ghostPos(link.source, plan), let b = ghostPos(link.target, plan) else { continue }
+                    var p = Path()
+                    p.move(to: worldToScreen(a)); p.addLine(to: worldToScreen(b))
+                    ctx.stroke(p, with: .color(.white.opacity(0.55)),
+                               style: .init(lineWidth: 1.6, dash: [6, 5]))
+                }
+            }
+            .allowsHitTesting(false)
+
+            ForEach(Array(plan.ghostPositions.keys), id: \.self) { id in
+                if let obj = store.objects.first(where: { $0.id == id }) {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.05))
+                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.white.opacity(0.4), style: .init(lineWidth: 1, dash: [5, 4])))
+                        .frame(width: obj.size.width * scale, height: obj.size.height * scale)
+                        .position(worldToScreen(plan.ghostPositions[id] ?? obj.position))
+                        .allowsHitTesting(false)
+                }
+            }
+        }
+        .transition(.opacity)
+    }
+
+    private func ghostPos(_ id: String, _ plan: OrganizePlan) -> CGPoint? {
+        if let g = plan.ghostPositions[id] { return g }
+        return store.objects.first(where: { $0.id == id })?.position
+    }
+
+    private func timelineAxis(_ layout: TimelineLayout) -> some View {
+        Canvas { context, _ in
+            guard !layout.isEmpty else { return }
+            let cs = TimelineLayout.columnSpacing
+            let baseY = layout.baselineY
+
+            // 时间轴基线
+            var base = Path()
+            base.move(to: worldToScreen(CGPoint(x: layout.minX - cs / 2, y: baseY)))
+            base.addLine(to: worldToScreen(CGPoint(x: layout.maxX + cs / 2, y: baseY)))
+            context.stroke(base, with: .color(.white.opacity(0.18)), lineWidth: 1)
+
+            // 阶段分隔线 + 阶段标题
+            func divider(atWorldX x: CGFloat) {
+                var d = Path()
+                d.move(to: worldToScreen(CGPoint(x: x, y: baseY - 320)))
+                d.addLine(to: worldToScreen(CGPoint(x: x, y: baseY + 320)))
+                context.stroke(d, with: .color(.white.opacity(0.06)),
+                               style: .init(lineWidth: 1, dash: [3, 7]))
+            }
+            for band in layout.bands {
+                divider(atWorldX: band.xStart)
+                let labelPt = worldToScreen(CGPoint(x: band.labelX, y: baseY - 300))
+                context.draw(
+                    Text(band.phase.title).font(AtlasFont.mono)
+                        .foregroundColor(Color.white.opacity(0.32 + 0.5 * band.phase.emphasis)),
+                    at: labelPt, anchor: .center
+                )
+            }
+            if let last = layout.bands.last { divider(atWorldX: last.xEnd) }
+
+            // 每列：连接线 + 刻度点 + 日期标签
+            for col in layout.columns {
+                let tick = worldToScreen(CGPoint(x: col.x, y: baseY))
+                for id in col.eventIDs {
+                    if let p = layout.positions[id] {
+                        var c = Path()
+                        c.move(to: tick); c.addLine(to: worldToScreen(p))
+                        context.stroke(c, with: .color(.white.opacity(0.12)), lineWidth: 1)
+                    }
+                }
+                let r: CGFloat = 4
+                context.fill(
+                    Path(ellipseIn: CGRect(x: tick.x - r, y: tick.y - r, width: 2 * r, height: 2 * r)),
+                    with: .color(.white.opacity(0.55))
+                )
+                if !col.dateLabel.isEmpty {
+                    context.draw(
+                        Text(col.dateLabel).font(AtlasFont.monoSmall)
+                            .foregroundColor(Color.white.opacity(0.5)),
+                        at: CGPoint(x: tick.x, y: tick.y + 16), anchor: .center
+                    )
+                }
+            }
         }
         .allowsHitTesting(false)
     }
@@ -300,7 +424,17 @@ struct WorldBuilderCanvas: View {
 
     @ViewBuilder
     private var detailPanel: some View {
-        if let id = store.selectedID, let bind = store.binding(for: id) {
+        if let rid = store.selectedRelationID, let rbind = store.relationBinding(for: rid) {
+            RelationDetailCard(relation: rbind, store: store) {
+                store.removeLink(rid)
+            }
+            .frame(width: 300)
+            .padding(.trailing, AtlasSpacing.l)
+            .padding(.top, 68)
+            .padding(.bottom, AtlasSpacing.l)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .transition(.move(edge: .trailing).combined(with: .opacity))
+        } else if let id = store.selectedID, let bind = store.binding(for: id) {
             DetailCard(object: bind, store: store) {
                 store.delete(id)
             }
@@ -317,39 +451,19 @@ struct WorldBuilderCanvas: View {
 
     private var commandBar: some View {
         VStack(spacing: AtlasSpacing.s) {
-            if let object = store.selected {
-                // 选中态：上下文芯片 + 编号快捷建议（Agent 只递卡，采纳才作数）
-                HStack(spacing: AtlasSpacing.s) {
-                    HStack(spacing: 5) {
-                        NodeGlyph(shape: object.kind.shape, symbol: object.kind.symbol, size: 16)
-                        Text(store.displayName(object)).font(AtlasFont.caption)
-                    }
-                    .foregroundStyle(AtlasColor.textSecondary)
-                    .padding(.horizontal, AtlasSpacing.s).padding(.vertical, 4)
-                    .background(Color.white.opacity(0.06), in: Capsule())
-
-                    ForEach(Array(quickActions(for: object.kind).enumerated()), id: \.offset) { index, action in
-                        Button {
-                            model.showToast("已递卡：\(action)（作者采纳才进设定 · 下一轮接入）")
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text(action).font(AtlasFont.caption)
-                                Text("\(index + 1)").font(AtlasFont.monoSmall)
-                                    .foregroundStyle(AtlasColor.textTertiary)
-                            }
-                            .foregroundStyle(AtlasColor.textPrimary)
-                            .padding(.horizontal, AtlasSpacing.s).padding(.vertical, 5)
-                            .background(AtlasP1Glass.darkFill, in: Capsule())
-                            .overlay(Capsule().stroke(AtlasColor.borderSubtle))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    Spacer(minLength: 0)
-                }
+            // 整理通道：思考 / 方案预览 / 错误（与递卡并列的另一条通道）
+            if commandMode == .organize {
+                organizePanel
+            } else if let object = store.selected {
+                quickActionRow(object)
             }
 
             HStack(spacing: AtlasSpacing.s) {
-                Image(systemName: store.selected == nil ? "plus.circle" : "text.cursor")
+                modeToggle
+                Divider().frame(height: 16).overlay(AtlasColor.borderSubtle)
+                Image(systemName: commandMode == .organize
+                      ? "wand.and.stars"
+                      : (store.selected == nil ? "plus.circle" : "text.cursor"))
                     .font(.system(size: 13))
                     .foregroundStyle(AtlasColor.textTertiary)
                 TextField(commandPlaceholder, text: $commandText)
@@ -359,10 +473,11 @@ struct WorldBuilderCanvas: View {
                     .focused($commandFocused)
                     .onSubmit { runCommand() }
                 Button { runCommand() } label: {
-                    Image(systemName: "arrow.up").frame(width: 20, height: 20)
+                    Image(systemName: commandMode == .organize ? "wand.and.stars" : "arrow.up")
+                        .frame(width: 20, height: 20)
                 }
                 .buttonStyle(.atlas(.primary))
-                .disabled(commandText.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(commandText.trimmingCharacters(in: .whitespaces).isEmpty || organizer.isThinking)
             }
             .padding(.horizontal, AtlasSpacing.m)
             .padding(.vertical, AtlasSpacing.s)
@@ -372,7 +487,138 @@ struct WorldBuilderCanvas: View {
         .padding(.bottom, AtlasSpacing.l)
     }
 
+    // 递卡通道：选中对象的编号快捷建议（Agent 只递卡，采纳才作数）
+    private func quickActionRow(_ object: BuilderObject) -> some View {
+        HStack(spacing: AtlasSpacing.s) {
+            HStack(spacing: 5) {
+                NodeGlyph(shape: object.kind.shape, symbol: object.kind.symbol, size: 16)
+                Text(store.displayName(object)).font(AtlasFont.caption)
+            }
+            .foregroundStyle(AtlasColor.textSecondary)
+            .padding(.horizontal, AtlasSpacing.s).padding(.vertical, 4)
+            .background(Color.white.opacity(0.06), in: Capsule())
+
+            ForEach(Array(quickActions(for: object.kind).enumerated()), id: \.offset) { index, action in
+                Button {
+                    model.showToast("已递卡：\(action)（作者采纳才进设定 · 下一轮接入）")
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(action).font(AtlasFont.caption)
+                        Text("\(index + 1)").font(AtlasFont.monoSmall)
+                            .foregroundStyle(AtlasColor.textTertiary)
+                    }
+                    .foregroundStyle(AtlasColor.textPrimary)
+                    .padding(.horizontal, AtlasSpacing.s).padding(.vertical, 5)
+                    .background(AtlasP1Glass.darkFill, in: Capsule())
+                    .overlay(Capsule().stroke(AtlasColor.borderSubtle))
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    // 放置 / AI 整理 模式切换
+    private var modeToggle: some View {
+        HStack(spacing: 2) {
+            modeSeg("放置", .place, "plus")
+            modeSeg("整理", .organize, "wand.and.stars")
+        }
+        .padding(2)
+        .background(Color.white.opacity(0.05), in: Capsule())
+        .overlay(Capsule().stroke(AtlasColor.borderSubtle))
+    }
+
+    private func modeSeg(_ title: String, _ mode: CommandMode, _ symbol: String) -> some View {
+        Button {
+            withAnimation(.snappy(duration: 0.2)) { commandMode = mode; commandText = "" }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: symbol).font(.system(size: 9))
+                Text(title).font(AtlasFont.caption)
+            }
+            .foregroundStyle(commandMode == mode ? AtlasColor.inverse : AtlasColor.textSecondary)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background { if commandMode == mode { Capsule().fill(Color.white) } }
+        }
+        .buttonStyle(.plain)
+    }
+
+    // 整理方案预览面板（仅在思考/有方案/有错误时出现）
+    @ViewBuilder
+    private var organizePanel: some View {
+        if organizer.isThinking {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("正在整理画布…").font(AtlasFont.caption).foregroundStyle(AtlasColor.textSecondary)
+            }
+            .frame(width: 560, alignment: .leading)
+            .padding(.horizontal, AtlasSpacing.m).padding(.vertical, AtlasSpacing.s)
+            .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
+        } else if let plan = organizer.plan {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "wand.and.stars").font(.system(size: 11))
+                    Text("整理方案").font(AtlasFont.label)
+                    Spacer()
+                    Text(planCountLabel(plan)).font(AtlasFont.monoSmall)
+                        .foregroundStyle(AtlasColor.textTertiary)
+                }
+                .foregroundStyle(AtlasColor.textSecondary)
+
+                ForEach(Array(plan.summaries.prefix(4).enumerated()), id: \.offset) { _, s in
+                    HStack(spacing: 6) {
+                        Image(systemName: "circle.fill").font(.system(size: 3))
+                        Text(s).font(AtlasFont.caption).lineLimit(1)
+                    }
+                    .foregroundStyle(AtlasColor.textSecondary)
+                }
+                if plan.summaries.count > 4 {
+                    Text("…等共 \(plan.summaries.count) 项").font(AtlasFont.monoSmall)
+                        .foregroundStyle(AtlasColor.textTertiary)
+                }
+
+                HStack(spacing: AtlasSpacing.s) {
+                    Button { organizer.adopt(into: store) } label: {
+                        AtlasButtonLabel(title: "采纳整理", systemImage: "checkmark")
+                    }
+                    .buttonStyle(.atlas(.primary))
+                    Button { organizer.discard() } label: {
+                        AtlasButtonLabel(title: "撤销", systemImage: "xmark")
+                    }
+                    .buttonStyle(.atlas(.glass))
+                    Spacer(minLength: 0)
+                }
+                .padding(.top, 2)
+            }
+            .frame(width: 560, alignment: .leading)
+            .padding(.horizontal, AtlasSpacing.m).padding(.vertical, AtlasSpacing.s)
+            .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
+        } else if let err = organizer.errorText {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle").font(.system(size: 11))
+                Text(err).font(AtlasFont.caption).lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .foregroundStyle(AtlasColor.textSecondary)
+            .frame(width: 560, alignment: .leading)
+            .padding(.horizontal, AtlasSpacing.m).padding(.vertical, AtlasSpacing.s)
+            .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
+        }
+    }
+
+    private func planCountLabel(_ plan: OrganizePlan) -> String {
+        var parts: [String] = []
+        if plan.moveCount > 0 { parts.append("移动 \(plan.moveCount)") }
+        if plan.linkCount > 0 { parts.append("连接 \(plan.linkCount)") }
+        if plan.unlinkCount > 0 { parts.append("移除 \(plan.unlinkCount)") }
+        return parts.joined(separator: " · ")
+    }
+
     private var commandPlaceholder: String {
+        if commandMode == .organize {
+            return "让我整理画布：如「按类型归类」「把艾琳娜和森林议会连起来」"
+        }
         if let object = store.selected {
             return "对「\(store.displayName(object))」追问或补充…"
         }
@@ -417,6 +663,13 @@ struct WorldBuilderCanvas: View {
         let text = commandText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
+        // 整理通道：交给 Agent 生成待采纳的整理方案（只动布局与关系，不改正文）。
+        if commandMode == .organize {
+            organizer.propose(instruction: text, store: store)
+            commandText = ""
+            return
+        }
+
         if let id = store.selectedID, let index = store.objects.firstIndex(where: { $0.id == id }) {
             store.objects[index].summary = store.objects[index].summary.isEmpty
                 ? text : store.objects[index].summary + "\n" + text
@@ -453,7 +706,51 @@ struct WorldBuilderCanvas: View {
     }
 
     private func select(_ id: String?) {
-        withAnimation(.snappy(duration: 0.22)) { store.selectedID = id }
+        guard let id else {
+            withAnimation(.snappy(duration: 0.22)) { store.clearSelection() }
+            return
+        }
+        // 按住 ⇧ 或 ⌘ 点选 → 加入/移出多选；否则单选。
+        let mods = NSEvent.modifierFlags
+        withAnimation(.snappy(duration: 0.22)) {
+            if mods.contains(.command) || mods.contains(.shift) {
+                store.toggle(id)
+            } else {
+                store.selectedID = id
+            }
+        }
+    }
+
+    private func selectRelation(_ id: String) {
+        withAnimation(.snappy(duration: 0.2)) { store.selectRelation(id) }
+    }
+
+    // Delete / Backspace 删除全部选中对象（编辑文本时不拦截）。
+    private func startKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if showMapEditor { return event }
+            if let responder = NSApp.keyWindow?.firstResponder,
+               responder is NSText || responder is NSTextView { return event }
+            guard event.keyCode == 51 || event.keyCode == 117 else { return event }   // 51=Backspace 117=Delete
+            if !store.selectedIDs.isEmpty {
+                let ids = store.selectedIDs
+                withAnimation(.snappy(duration: 0.22)) { ids.forEach { store.delete($0) } }
+                return nil
+            }
+            if let rel = store.selectedRelationID {
+                withAnimation(.snappy(duration: 0.22)) { store.removeLink(rel) }
+                return nil
+            }
+            return event
+        }
+    }
+
+    private func stopKeyMonitor() {
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyMonitor = nil
+        }
     }
 
     // 右键在指针处新建卡片
@@ -586,6 +883,10 @@ private struct ObjectCard: View {
     @State private var activeCorner: Int?          // 当前贴近的角（0左上 1右上 2左下 3右下）
 
     var pan: CGSize
+    /// 布局锁定（时间线投影：位置由算法接管，禁用拖动/改尺寸，仅可选中）。
+    var layoutLocked: Bool = false
+    /// 淡化（时间线里非事件卡）。
+    var dimmed: Bool = false
 
     private let radius: CGFloat = 16
     private let arcMargin: CGFloat = 22            // 弧线画布向外扩，好让弧落在圆角外面
@@ -612,7 +913,7 @@ private struct ObjectCard: View {
                 switch phase {
                 case .active(let p):
                     hoverLocal = p
-                    activeCorner = nearestResizeCorner(p)
+                    activeCorner = layoutLocked ? nil : nearestResizeCorner(p)
                 case .ended:
                     hoverLocal = nil
                     activeCorner = nil
@@ -693,6 +994,7 @@ private struct ObjectCard: View {
         // 用稳定的 canvas 坐标系（不随卡片移动），否则 .local 空间会随卡片位移形成反馈环 → 抖动。
         DragGesture(minimumDistance: 3, coordinateSpace: .named("canvas"))
             .onChanged { value in
+                if layoutLocked { return }        // 时间线：位置由算法接管，禁拖动
                 if dragMode == nil {
                     // 把起点换算成卡片本地坐标，判断是否落在角上
                     let centerScreen = worldToScreen(object.position)
@@ -890,6 +1192,10 @@ private struct InfoCardBody: View {
                     .lineLimit(2)
                     .minimumScaleFactor(0.9)
 
+                if object.kind == .event, let time = object.time {
+                    TimeChip(time: time)
+                }
+
                 if object.summary.isEmpty {
                     Text(object.kind.hint)
                         .font(AtlasFont.caption)
@@ -1009,6 +1315,14 @@ private struct DetailCard: View {
     @ObservedObject var store: WorldBuilderStore
     var onDelete: () -> Void
 
+    /// 事件时间的非可选绑定（object.time 为 nil 时给一个默认阶段）。
+    private var eventTimeBinding: Binding<EventTime> {
+        Binding(
+            get: { object.time ?? EventTime(phase: .rising) },
+            set: { object.time = $0 }
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: AtlasSpacing.l) {
             HStack {
@@ -1049,6 +1363,11 @@ private struct DetailCard: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: AtlasSpacing.l) {
+                    if object.kind == .event {
+                        EventTimeSection(time: eventTimeBinding)
+                        Divider().overlay(AtlasColor.borderSubtle)
+                    }
+
                     VStack(alignment: .leading, spacing: AtlasSpacing.xs) {
                         Text("档案内容").font(AtlasFont.caption).foregroundStyle(AtlasColor.textTertiary)
                         BuilderMentionEditor(object: $object, store: store)

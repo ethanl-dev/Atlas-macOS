@@ -2,31 +2,37 @@ import SwiftUI
 
 struct RootView: View {
     @StateObject private var model = AtlasAppModel()
+    @StateObject private var iris = IrisTransition()
+
+    // 创建世界 从星图右上角的按钮绽放；返回星图从编辑器左上角的返回按钮收拢。
+    private let createOrigin = UnitPoint(x: 0.9, y: 0.08)
+    private let returnOrigin = UnitPoint(x: 0.04, y: 0.06)
 
     var body: some View {
-        Group {
-            if model.creatingWorld {
-                // 创建世界 = 进入 World Canvas（组件库 + 自由画布 + 可编辑详情卡），地图只是底盘之一
-                WorldBuilderCanvas(
-                    model: model,
-                    mode: "create",
-                    worldName: "未命名世界",
-                    onExit: {
-                        withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = false }
+        ZStack {
+            Group {
+                if model.creatingWorld {
+                    // 创建世界 = 进入 World Canvas（组件库 + 自由画布 + 可编辑详情卡），地图只是底盘之一
+                    WorldBuilderCanvas(
+                        model: model,
+                        mode: "create",
+                        worldName: "未命名世界",
+                        onExit: {
+                            iris.run(from: returnOrigin) { model.creatingWorld = false }
+                        }
+                    )
+                    .ignoresSafeArea()
+                } else if model.destination == .discover {
+                    DiscoverView(model: model) {
+                        iris.run(from: createOrigin) { model.creatingWorld = true }
                     }
-                )
-                .ignoresSafeArea()
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            } else if model.destination == .discover {
-                DiscoverView(model: model) {
-                    withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = true }
+                } else {
+                    projectShell
                 }
-                .transition(.opacity)
-            } else {
-                projectShell
             }
+
+            IrisCurtain(iris: iris)
         }
-        .animation(.snappy(duration: 0.32), value: model.creatingWorld)
         .sheet(item: $model.activeSheet) { sheet in
             sheetView(sheet)
         }

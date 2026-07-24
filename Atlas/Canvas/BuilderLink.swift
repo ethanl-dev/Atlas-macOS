@@ -97,11 +97,41 @@ extension WorldBuilderStore {
 
     func removeLink(_ id: String) {
         relations.removeAll { $0.id == id }
+        if selectedRelationID == id { selectedRelationID = nil }
         saved = false
     }
 
     func linkCount(for source: String) -> Int {
         relations.filter { $0.sourceID == source }.count
+    }
+
+    // MARK: - Agent「整理」通道用的操作（不触碰卡片正文；只动布局与关系）
+
+    /// 直接把一张卡移到世界坐标（Agent 采纳整理方案时用）。
+    func place(_ id: String, at position: CGPoint) {
+        guard let i = objects.firstIndex(where: { $0.id == id }) else { return }
+        objects[i].position = position
+        saved = false
+    }
+
+    /// 无字段语义地新建一条关系（Agent 提议 / 采纳时用）。返回新关系 id。
+    @discardableResult
+    func createRelation(source: String, target: String,
+                        subtag: String? = nil, title: String = "",
+                        narrative: String = "", strength: RelationStrength = .medium,
+                        proposed: Bool = false) -> String? {
+        guard source != target,
+              objects.contains(where: { $0.id == source }),
+              objects.contains(where: { $0.id == target }) else { return nil }
+        let id = "rel-\(UUID().uuidString.prefix(8))"
+        relations.append(
+            BuilderRelation(id: id, sourceID: source, targetID: target,
+                            label: subtag ?? title, fieldKey: "关系",
+                            subtag: subtag, title: title,
+                            strength: strength, narrative: narrative, proposed: proposed)
+        )
+        saved = false
+        return id
     }
 }
 
@@ -116,29 +146,29 @@ struct BuilderLinkChip: View {
         let target = store.object(withID: relation.targetID)
         HStack(spacing: 5) {
             Image(systemName: target?.kind.symbol ?? "questionmark.circle")
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(AtlasColor.textSecondary)
             Text(target.map { store.displayName($0) } ?? "已失效")
-                .font(AtlasFont.caption)
+                .font(AtlasFont.label)
                 .foregroundStyle(target == nil ? AtlasColor.textDisabled : AtlasColor.textPrimary)
                 .strikethrough(target == nil, color: AtlasColor.textDisabled)
                 .lineLimit(1)
             if let sub = relation.subtag {
-                Text(sub).font(AtlasFont.monoSmall).foregroundStyle(AtlasColor.textTertiary)
+                Text(sub).font(AtlasFont.mono).foregroundStyle(AtlasColor.textTertiary)
                     .padding(.leading, 5)
                     .overlay(alignment: .leading) {
-                        Rectangle().fill(AtlasColor.borderSubtle).frame(width: 1, height: 11)
+                        Rectangle().fill(AtlasColor.borderSubtle).frame(width: 1, height: 12)
                     }
             }
             if let onRemove {
                 Button(action: onRemove) {
-                    Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
+                    Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
                         .foregroundStyle(AtlasColor.textTertiary)
                 }
                 .buttonStyle(.plain).padding(.leading, 1)
             }
         }
-        .padding(.horizontal, 8).padding(.vertical, 4)
+        .padding(.horizontal, 9).padding(.vertical, 5)
         .background(Color.white.opacity(0.05), in: Capsule())
         .overlay(Capsule().stroke(AtlasColor.borderSubtle, lineWidth: 1))
     }
@@ -155,10 +185,10 @@ struct BuilderLinkSection: View {
         if !fields.isEmpty {
             VStack(alignment: .leading, spacing: AtlasSpacing.m) {
                 HStack {
-                    Text("关联").font(AtlasFont.caption).foregroundStyle(AtlasColor.textTertiary)
+                    Text("关联").font(AtlasFont.label).foregroundStyle(AtlasColor.textSecondary)
                     Spacer()
                     Text("\(store.linkCount(for: object.id))")
-                        .font(AtlasFont.monoSmall).foregroundStyle(AtlasColor.textTertiary)
+                        .font(AtlasFont.mono).foregroundStyle(AtlasColor.textTertiary)
                 }
                 ForEach(fields) { field in
                     BuilderLinkFieldRow(object: object, field: field, store: store)
@@ -177,11 +207,11 @@ private struct BuilderLinkFieldRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 5) {
-                Text(field.key).font(AtlasFont.monoSmall).foregroundStyle(AtlasColor.textTertiary).tracking(0.5)
+                Text(field.key).font(AtlasFont.mono).foregroundStyle(AtlasColor.textSecondary).tracking(0.5)
                 if let lock = field.layer.symbol {
-                    Image(systemName: lock).font(.system(size: 8)).foregroundStyle(AtlasColor.textDisabled)
+                    Image(systemName: lock).font(.system(size: 9)).foregroundStyle(AtlasColor.textTertiary)
                 }
-                Text("→ \(field.semantic)").font(AtlasFont.monoSmall).foregroundStyle(AtlasColor.textDisabled)
+                Text("→ \(field.semantic)").font(AtlasFont.mono).foregroundStyle(AtlasColor.textTertiary)
             }
 
             FlowLayout(spacing: 6) {
@@ -190,11 +220,11 @@ private struct BuilderLinkFieldRow: View {
                 }
                 Button { showPicker = true } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: "plus").font(.system(size: 9, weight: .semibold))
-                        Text("关联\(field.acceptLabel)").font(AtlasFont.caption)
+                        Image(systemName: "plus").font(.system(size: 10, weight: .semibold))
+                        Text("关联\(field.acceptLabel)").font(AtlasFont.label)
                     }
                     .foregroundStyle(AtlasColor.textSecondary)
-                    .padding(.horizontal, 9).padding(.vertical, 4)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
                     .overlay(Capsule().stroke(AtlasColor.borderDefault, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
                 }
                 .buttonStyle(.plain)

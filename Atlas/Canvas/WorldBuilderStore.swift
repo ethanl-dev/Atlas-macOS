@@ -103,9 +103,35 @@ struct BuilderObject: Identifiable {
     var position: CGPoint      // 画布世界坐标（卡片中心）
     var size: CGSize           // 卡片尺寸（世界坐标，可拉角改变）
     var aiAssisted: Bool = false
+    /// 事件卡的时间元素（阶段 + 可选世界内日期）。仅 .event 有意义；其它类型为 nil。
+    var time: EventTime? = nil
 }
 
-// MARK: - 关系线
+// MARK: - 关系强度（黑白系统：用线宽 + 亮度表达，不用色）
+
+enum RelationStrength: String, CaseIterable, Identifiable, Codable {
+    case weak   = "淡"
+    case medium = "常"
+    case strong = "深"
+
+    var id: String { rawValue }
+    var lineWidth: CGFloat {
+        switch self {
+        case .weak:   return 1
+        case .medium: return 1.8
+        case .strong: return 3
+        }
+    }
+    var opacity: Double {
+        switch self {
+        case .weak:   return 0.20
+        case .medium: return 0.34
+        case .strong: return 0.55
+        }
+    }
+}
+
+// MARK: - 关系线（升级为一等对象：可命名、可标强度、可写一段长文/故事）
 
 struct BuilderRelation: Identifiable {
     let id: String
@@ -116,6 +142,24 @@ struct BuilderRelation: Identifiable {
     var fieldKey: String = ""
     /// 关系性 link 的子标签（盟友/敌对/对抗…），结构性为 nil。
     var subtag: String? = nil
+
+    // —— 一等对象升级字段 ——
+    /// 关系的名字（可选，如「十年之约」）。空则用 subtag/label 兜底显示。
+    var title: String = ""
+    /// 关系强度（连线粗细 + 亮度）。
+    var strength: RelationStrength = .medium
+    /// 复杂关系的长文/故事。连线表达不了的，写在这里。
+    var narrative: String = ""
+    /// 是否由 Agent 提议、尚未被作者采纳（用于幽灵预览的虚线渲染）。
+    var proposed: Bool = false
+
+    /// 连线中点 chip 的短标签。
+    var chipLabel: String {
+        if !title.trimmingCharacters(in: .whitespaces).isEmpty { return title }
+        if let s = subtag, !s.isEmpty { return s }
+        return label
+    }
+    var hasNarrative: Bool { !narrative.trimmingCharacters(in: .whitespaces).isEmpty }
 }
 
 // MARK: - 投影模式（同一批对象的三种排布，不是三块画布）
@@ -142,12 +186,45 @@ final class WorldBuilderStore: ObservableObject {
     @Published var objects: [BuilderObject]
     @Published var relations: [BuilderRelation] = []
     @Published var selectedIDs: Set<String> = []
+    /// 选中的关系（一等对象）。与对象选择互斥：选关系时清空对象选择，反之亦然。
+    @Published var selectedRelationID: String? = nil
     @Published var projection: BuilderProjection = .map
 
     /// 单选便捷入口：恰好选中一个时返回它，否则 nil（详情卡只在单选时出现）。
     var selectedID: String? {
         get { selectedIDs.count == 1 ? selectedIDs.first : nil }
-        set { selectedIDs = newValue.map { [$0] } ?? [] }
+        set {
+            selectedIDs = newValue.map { [$0] } ?? []
+            if newValue != nil { selectedRelationID = nil }   // 选对象即取消选关系
+        }
+    }
+
+    /// 选中一条关系（清空对象选择）。
+    func selectRelation(_ id: String?) {
+        selectedRelationID = id
+        if id != nil { selectedIDs = [] }
+    }
+
+    var selectedRelation: BuilderRelation? {
+        guard let id = selectedRelationID else { return nil }
+        return relations.first { $0.id == id }
+    }
+
+    /// 关系的可写绑定（供 RelationDetailCard 编辑标题/强度/叙事）。
+    func relationBinding(for id: String) -> Binding<BuilderRelation>? {
+        guard relations.contains(where: { $0.id == id }) else { return nil }
+        return Binding(
+            get: {
+                self.relations.first(where: { $0.id == id })
+                    ?? BuilderRelation(id: id, sourceID: "", targetID: "", label: "")
+            },
+            set: {
+                if let i = self.relations.firstIndex(where: { $0.id == id }) {
+                    self.relations[i] = $0
+                    self.saved = false
+                }
+            }
+        )
     }
 
     private var groupDragAnchors: [String: CGPoint]?
@@ -204,10 +281,12 @@ final class WorldBuilderStore: ObservableObject {
     func add(_ kind: BuilderKind, at position: CGPoint) -> String {
         counter += 1
         let id = "\(kind.rawValue)-\(counter)-\(Int(Date().timeIntervalSince1970))"
-        let object = BuilderObject(
+        var object = BuilderObject(
             id: id, kind: kind, name: "",
             summary: "", position: position, size: kind.defaultSize
         )
+        // 事件天生带时间元素：默认落在「发展」阶段，作者可在详情卡改。
+        if kind == .event { object.time = EventTime(phase: .rising) }
         objects.append(object)
         if kind == .map { mapMade = true }
         selectedID = id
@@ -235,17 +314,19 @@ final class WorldBuilderStore: ObservableObject {
     }
 
     func delete(_ id: String) {
+        let dropped = relations.filter { $0.sourceID == id || $0.targetID == id }.map(\.id)
         objects.removeAll { $0.id == id }
         relations.removeAll { $0.sourceID == id || $0.targetID == id }
         selectedIDs.remove(id)
+        if let sel = selectedRelationID, dropped.contains(sel) { selectedRelationID = nil }
         saved = false
     }
 
     // MARK: - 选择
 
-    func selectOnly(_ id: String) { selectedIDs = [id] }
-    func toggle(_ id: String) { if selectedIDs.contains(id) { selectedIDs.remove(id) } else { selectedIDs.insert(id) } }
-    func clearSelection() { selectedIDs = [] }
+    func selectOnly(_ id: String) { selectedIDs = [id]; selectedRelationID = nil }
+    func toggle(_ id: String) { if selectedIDs.contains(id) { selectedIDs.remove(id) } else { selectedIDs.insert(id) }; selectedRelationID = nil }
+    func clearSelection() { selectedIDs = []; selectedRelationID = nil }
 
     /// 框选：选中中心落在矩形内、或与矩形相交的卡片（世界坐标）。
     func selectInRect(_ rect: CGRect, additive: Bool) {
