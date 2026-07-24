@@ -366,7 +366,7 @@ struct PublicProjectView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(work.title)
                             .font(AtlasFont.title)
-                        Text("\(work.author) · \(work.type)")
+                        Text("@\(work.author) · \(work.type)")
                             .font(AtlasFont.caption)
                             .foregroundStyle(AtlasColor.textSecondary)
                     }
@@ -704,16 +704,6 @@ private struct LibraryWorkCard: View {
     let action: () -> Void
     @State private var hovering = false
 
-    private var mediaAspectRatio: CGFloat {
-        switch work.kind {
-        case .titledMedia: 1.16
-        case .pureMedia: 1.55
-        case .portraitMedia: 0.72
-        case .untitledVideo: 16 / 9
-        case .text: 1
-        }
-    }
-
     var body: some View {
         let cardShape = RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous)
 
@@ -731,14 +721,15 @@ private struct LibraryWorkCard: View {
                             .font(AtlasFont.body)
                             .foregroundStyle(AtlasColor.textSecondary)
                             .lineSpacing(6)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .lineLimit(4, reservesSpace: true)
+                            .truncationMode(.tail)
                             .frame(maxWidth: .infinity, alignment: .topLeading)
-                        Text(work.author)
+                        Text("@\(work.author)")
                             .font(AtlasFont.caption)
                             .foregroundStyle(AtlasColor.textTertiary)
                     }
                     .padding(AtlasSpacing.l)
-                    .frame(maxWidth: .infinity, minHeight: 260, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, minHeight: 230, alignment: .topLeading)
                     .atlasFloatingGlass(
                         cardShape,
                         interactive: true
@@ -746,7 +737,9 @@ private struct LibraryWorkCard: View {
                 } else {
                     GeometryReader { proxy in
                         ZStack {
-                            PixabayLandscape(seed: work.seed + 2)
+                            Image(PixabayLandscape.imageName(for: work.seed + 2))
+                                .resizable()
+                                .scaledToFit()
                                 .frame(width: proxy.size.width, height: proxy.size.height)
 
                             if work.kind == .titledMedia {
@@ -776,7 +769,7 @@ private struct LibraryWorkCard: View {
                                         .foregroundStyle(.white)
                                         .fixedSize(horizontal: false, vertical: true)
                                         .frame(maxWidth: .infinity, alignment: .leading)
-                                    Text(work.author)
+                                    Text("@\(work.author)")
                                         .font(AtlasFont.caption)
                                         .foregroundStyle(Color.white.opacity(0.72))
                                 }
@@ -813,7 +806,10 @@ private struct LibraryWorkCard: View {
                         }
                         .frame(width: proxy.size.width, height: proxy.size.height)
                     }
-                    .aspectRatio(mediaAspectRatio, contentMode: .fit)
+                    .aspectRatio(
+                        PixabayLandscape.aspectRatio(for: work.seed + 2),
+                        contentMode: .fit
+                    )
                 }
             }
             .frame(minWidth: 0, maxWidth: .infinity)
@@ -863,16 +859,25 @@ private struct AssetArtworkPreview: View {
 private struct PixabayLandscape: View {
     let seed: Int
 
+    private static let images: [(name: String, ratio: CGFloat)] = [
+        ("PixabayBanner", 1280 / 720),
+        ("PixabayLandscape2", 1280 / 797),
+        ("PixabayLandscape3", 1280 / 873),
+        ("PixabayLandscape4", 1280 / 720),
+        ("PixabayLandscape5", 1280 / 853),
+        ("PixabayLandscape6", 1280 / 854)
+    ]
+
+    static func imageName(for seed: Int) -> String {
+        images[abs(seed) % images.count].name
+    }
+
+    static func aspectRatio(for seed: Int) -> CGFloat {
+        images[abs(seed) % images.count].ratio
+    }
+
     private var imageName: String {
-        let names = [
-            "PixabayBanner",
-            "PixabayLandscape2",
-            "PixabayLandscape3",
-            "PixabayLandscape4",
-            "PixabayLandscape5",
-            "PixabayLandscape6"
-        ]
-        return names[abs(seed) % names.count]
+        Self.imageName(for: seed)
     }
 
     var body: some View {
