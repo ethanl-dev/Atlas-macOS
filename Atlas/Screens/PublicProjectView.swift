@@ -441,10 +441,13 @@ private struct PublicWorldArtwork: View {
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0.00),
-                    .init(color: .clear, location: 0.75),
-                    .init(color: .black.opacity(0.12), location: 0.80),
-                    .init(color: .black.opacity(0.38), location: 0.88),
-                    .init(color: .black.opacity(0.66), location: 0.95),
+                    .init(color: .clear, location: 0.44),
+                    .init(color: .black.opacity(0.025), location: 0.48),
+                    .init(color: .black.opacity(0.10), location: 0.56),
+                    .init(color: .black.opacity(0.23), location: 0.66),
+                    .init(color: .black.opacity(0.41), location: 0.77),
+                    .init(color: .black.opacity(0.64), location: 0.89),
+                    .init(color: .black.opacity(0.79), location: 0.96),
                     .init(color: .black.opacity(0.90), location: 1.00)
                 ],
                 startPoint: .top,
