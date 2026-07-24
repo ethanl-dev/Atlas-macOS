@@ -744,10 +744,11 @@ private struct LibraryWorkCard: View {
                         interactive: true
                     )
                 } else {
-                    PixabayLandscape(seed: work.seed + 2)
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(mediaAspectRatio, contentMode: .fit)
-                        .overlay {
+                    GeometryReader { proxy in
+                        ZStack {
+                            PixabayLandscape(seed: work.seed + 2)
+                                .frame(width: proxy.size.width, height: proxy.size.height)
+
                             if work.kind == .titledMedia {
                                 Color.black.opacity(0.90)
                                     .mask {
@@ -762,9 +763,9 @@ private struct LibraryWorkCard: View {
                                             endPoint: .bottom
                                         )
                                     }
+                                    .frame(width: proxy.size.width, height: proxy.size.height)
                             }
-                        }
-                        .overlay(alignment: .bottomLeading) {
+
                             if work.kind == .titledMedia {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(work.type)
@@ -774,14 +775,19 @@ private struct LibraryWorkCard: View {
                                         .font(AtlasFont.heading)
                                         .foregroundStyle(.white)
                                         .fixedSize(horizontal: false, vertical: true)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                     Text(work.author)
                                         .font(AtlasFont.caption)
                                         .foregroundStyle(Color.white.opacity(0.72))
                                 }
                                 .padding(AtlasSpacing.l)
+                                .frame(
+                                    width: proxy.size.width,
+                                    height: proxy.size.height,
+                                    alignment: .bottomLeading
+                                )
                             }
-                        }
-                        .overlay {
+
                             if work.kind == .untitledVideo {
                                 Image(systemName: "play.fill")
                                     .font(.system(size: 22, weight: .semibold))
@@ -789,8 +795,7 @@ private struct LibraryWorkCard: View {
                                     .frame(width: 54, height: 54)
                                     .atlasP1Glass(Circle())
                             }
-                        }
-                        .overlay(alignment: .bottomLeading) {
+
                             if work.kind != .titledMedia {
                                 Text("@\(work.author)")
                                     .font(AtlasFont.caption)
@@ -799,8 +804,16 @@ private struct LibraryWorkCard: View {
                                     .padding(.vertical, 7)
                                     .shadow(color: .black, radius: 7, y: 2)
                                     .padding(AtlasSpacing.s)
+                                    .frame(
+                                        width: proxy.size.width,
+                                        height: proxy.size.height,
+                                        alignment: .bottomLeading
+                                    )
                             }
                         }
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                    }
+                    .aspectRatio(mediaAspectRatio, contentMode: .fit)
                 }
             }
             .frame(minWidth: 0, maxWidth: .infinity)
