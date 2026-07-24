@@ -6,44 +6,18 @@ struct RootView: View {
     var body: some View {
         Group {
             if model.creatingWorld {
-                Group {
-                    if model.creationStage == .story {
-                        WorldCreationFlow(
-                            model: model,
-                            onClose: {
-                                withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = false }
-                            },
-                            onComplete: {
-                                model.creationCompleted = true
-                                model.registerCreatedWorld(model.activeWorldID)
-                                model.accessMode = .manage
-                                model.destination = .canvas
-                                withAnimation(.snappy(duration: 0.32)) {
-                                    model.creatingWorld = false
-                                }
-                            }
-                        )
-                    } else {
-                        // React 原型的路径：世界概念确认后，进入空白地图尺寸设置、绘制与保存。
-                        WorldMapCanvasView(
-                            mode: "create",
-                            canEdit: true,
-                            initialMapJSON: nil,
-                            onExit: {
-                                withAnimation(.snappy(duration: 0.32)) { model.creationStage = .story }
-                            },
-                            onSave: { _, mapJSON in
-                                model.saveMapJSON(mapJSON, for: model.activeWorldID)
-                                model.creationCompleted = true
-                                model.registerCreatedWorld(model.activeWorldID)
-                                model.accessMode = .manage
-                                model.destination = .canvas
-                                withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = false }
-                            }
-                        )
-                        .ignoresSafeArea()
+                WorldBuilderCanvas(
+                    model: model,
+                    mode: "create",
+                    worldName: "未命名世界",
+                    canEdit: true,
+                    onExit: {
+                        withAnimation(.snappy(duration: 0.32)) {
+                            model.creatingWorld = false
+                        }
                     }
-                }
+                )
+                .ignoresSafeArea()
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             } else if model.destination == .discover {
                 DiscoverView(model: model) {
