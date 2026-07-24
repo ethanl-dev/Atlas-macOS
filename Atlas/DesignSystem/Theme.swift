@@ -38,6 +38,13 @@ enum AtlasColor {
     // 状态：黑白系统里不靠色相区分，用亮度 + 图标 + 文案。
     // 仅保留极低饱和的信号色作为"最后手段"，默认不用。
     static let signal = Color(white: 0.90)
+
+    // 创作型语义色：低饱和、可叠加在深色玻璃上，用于建立信息层级。
+    static let auroraBlue   = Color(red: 0.34, green: 0.56, blue: 1.00)
+    static let auroraViolet = Color(red: 0.72, green: 0.39, blue: 0.94)
+    static let auroraMint   = Color(red: 0.31, green: 0.88, blue: 0.74)
+    static let auroraAmber  = Color(red: 1.00, green: 0.68, blue: 0.32)
+    static let auroraRose   = Color(red: 1.00, green: 0.42, blue: 0.58)
 }
 
 // MARK: - 间距（4pt 基准）
@@ -93,9 +100,35 @@ enum AtlasFont {
 struct AtlasCanvasBackground: View {
     var body: some View {
         ZStack {
-            // 底色：从中心略亮到边缘更暗的单色渐变
+            Color.black
+                .ignoresSafeArea()
+
+            // 与首页星图一致的彩色深空光晕；内容层仍保持高对比黑底。
+            GeometryReader { proxy in
+                let size = proxy.size
+                Circle()
+                    .fill(Color(red: 0.20, green: 0.32, blue: 1.00).opacity(0.23))
+                    .frame(width: size.width * 0.55, height: size.width * 0.55)
+                    .blur(radius: 110)
+                    .offset(x: -size.width * 0.18, y: -size.height * 0.22)
+
+                Circle()
+                    .fill(Color(red: 0.72, green: 0.18, blue: 0.88).opacity(0.16))
+                    .frame(width: size.width * 0.42, height: size.width * 0.42)
+                    .blur(radius: 120)
+                    .offset(x: size.width * 0.68, y: size.height * 0.42)
+
+                Circle()
+                    .fill(Color(red: 0.10, green: 0.86, blue: 0.76).opacity(0.12))
+                    .frame(width: size.width * 0.34, height: size.width * 0.34)
+                    .blur(radius: 100)
+                    .offset(x: size.width * 0.28, y: size.height * 0.72)
+            }
+            .ignoresSafeArea()
+            .blendMode(.plusLighter)
+
             RadialGradient(
-                colors: [Color(white: 0.10), AtlasColor.canvas],
+                colors: [Color.clear, Color.black.opacity(0.72)],
                 center: .center,
                 startRadius: 40,
                 endRadius: 900
@@ -104,6 +137,15 @@ struct AtlasCanvasBackground: View {
 
             // 制图网格
             Canvas { context, size in
+                // 稀疏星点，管理界面也保留“世界漂浮在星图中”的感觉。
+                for index in 0..<72 {
+                    let x = CGFloat((index * 83) % 997) / 997 * size.width
+                    let y = CGFloat((index * 47 + 19) % 991) / 991 * size.height
+                    let radius: CGFloat = index.isMultiple(of: 9) ? 1.5 : 0.7
+                    let rect = CGRect(x: x, y: y, width: radius, height: radius)
+                    context.fill(Path(ellipseIn: rect), with: .color(.white.opacity(index.isMultiple(of: 9) ? 0.42 : 0.18)))
+                }
+
                 let step: CGFloat = 44
                 var path = Path()
                 var x: CGFloat = 0

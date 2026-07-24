@@ -9,11 +9,23 @@ struct ProjectOverviewView: View {
             Divider().overlay(AtlasColor.borderSubtle)
 
             GeometryReader { proxy in
-                HStack(spacing: 0) {
-                    worldState
-                        .frame(width: proxy.size.width * 0.58)
-                    Divider().overlay(AtlasColor.borderSubtle)
-                    activityRail
+                if proxy.size.width >= 840 {
+                    HStack(spacing: 0) {
+                        worldState
+                            .frame(width: proxy.size.width * 0.58)
+                        Divider().overlay(AtlasColor.borderSubtle)
+                        activityRail
+                    }
+                } else {
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            worldState
+                                .frame(height: max(430, proxy.size.height * 0.62))
+                            Divider().overlay(AtlasColor.borderSubtle)
+                            activityRail
+                                .frame(minHeight: 440)
+                        }
+                    }
                 }
             }
         }
@@ -21,6 +33,25 @@ struct ProjectOverviewView: View {
     }
 
     private var projectHeader: some View {
+        ViewThatFits(in: .horizontal) {
+            projectHeaderContent
+            VStack(alignment: .leading, spacing: AtlasSpacing.l) {
+                projectIdentity
+                HStack { Spacer(); projectActions }
+            }
+        }
+        .padding(AtlasSpacing.xl)
+    }
+
+    private var projectHeaderContent: some View {
+        HStack(alignment: .center, spacing: AtlasSpacing.l) {
+            projectIdentity
+            Spacer()
+            projectActions
+        }
+    }
+
+    private var projectIdentity: some View {
         HStack(alignment: .center, spacing: AtlasSpacing.l) {
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -34,7 +65,7 @@ struct ProjectOverviewView: View {
                 HStack(spacing: AtlasSpacing.s) {
                     Text(model.activeWorld.name)
                         .font(AtlasFont.title)
-                    Text(model.accessMode == .manage ? "管理模式" : "参与模式")
+                    Label(model.activeRole.rawValue, systemImage: model.activeRole.symbol)
                         .font(AtlasFont.monoSmall)
                         .foregroundStyle(AtlasColor.textTertiary)
                         .padding(.horizontal, 7)
@@ -45,10 +76,12 @@ struct ProjectOverviewView: View {
                     .font(AtlasFont.body)
                     .foregroundStyle(AtlasColor.textSecondary)
             }
+        }
+    }
 
-            Spacer()
-
-            if model.accessMode == .manage {
+    private var projectActions: some View {
+        HStack(spacing: AtlasSpacing.s) {
+            if model.accessMode == .manage && model.canWriteActiveWorld {
                 Button {
                     model.activeSheet = .publish
                 } label: {
@@ -57,14 +90,15 @@ struct ProjectOverviewView: View {
                 .buttonStyle(.atlas(.glass))
             }
 
-            Button {
-                model.destination = .canvas
-            } label: {
-                AtlasButtonLabel(title: model.accessMode == .manage ? "继续建设" : "进入世界", systemImage: "arrow.right")
+            if model.activeRole == .owner && model.canWriteActiveWorld {
+                Button {
+                    model.navigate(to: .canvas)
+                } label: {
+                    AtlasButtonLabel(title: "编辑世界地图", systemImage: "arrow.right")
+                }
+                .buttonStyle(.atlas(.primary))
             }
-            .buttonStyle(.atlas(.primary))
         }
-        .padding(AtlasSpacing.xl)
     }
 
     private var worldState: some View {
@@ -96,13 +130,15 @@ struct ProjectOverviewView: View {
                         stateLegend("角色", symbol: "person")
                         stateLegend("事件", symbol: "bolt")
                         Spacer()
-                        Button {
-                            model.destination = .canvas
-                        } label: {
-                            Label("打开地图", systemImage: "arrow.up.right")
-                                .font(AtlasFont.caption)
+                        if model.activeRole == .owner {
+                            Button {
+                                model.navigate(to: .canvas)
+                            } label: {
+                                Label("编辑地图", systemImage: "arrow.up.right")
+                                    .font(AtlasFont.caption)
+                            }
+                            .buttonStyle(.atlas(.glass))
                         }
-                        .buttonStyle(.atlas(.glass))
                     }
                     .padding(AtlasSpacing.l)
                 }
@@ -186,7 +222,7 @@ struct ProjectOverviewView: View {
 
             operationRow("继续夜航守望", count: "48h", destination: .tasks)
             operationRow("关系待确认", count: "2", destination: .tasks)
-            operationRow("作品审核进度", count: "1", destination: .inbox)
+            operationRow("收件箱", count: "1", destination: .inbox)
         }
     }
 

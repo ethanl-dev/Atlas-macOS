@@ -2,12 +2,13 @@ import SwiftUI
 
 enum AtlasDestination: String, CaseIterable, Identifiable {
     case discover = "星图"
+    case profile = "个人主页"
     case worlds = "我的世界"
     case overview = "企划总览"
     case canvas = "World Canvas"
     case wiki = "Wiki"
     case assets = "资产库"
-    case tasks = "任务与互动"
+    case tasks = "活动与互动"
     case review = "审核队列"
     case publicPreview = "公开预览"
     case inbox = "收件箱"
@@ -17,6 +18,7 @@ enum AtlasDestination: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .discover: return "sparkles"
+        case .profile: return "person.crop.circle"
         case .worlds: return "square.stack.3d.up"
         case .overview: return "circle.grid.2x2"
         case .canvas: return "map"
@@ -55,6 +57,35 @@ enum ProjectAccessMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// 身份属于“用户 × 企划”，同一用户在不同企划中可以拥有不同身份。
+enum ProjectRole: String, CaseIterable, Identifiable {
+    case owner = "企主"
+    case participant = "参企者"
+    case visitor = "游客"
+
+    var id: String { rawValue }
+
+    var symbol: String {
+        switch self {
+        case .owner: return "crown"
+        case .participant: return "person.2"
+        case .visitor: return "sparkles"
+        }
+    }
+
+    var accessMode: ProjectAccessMode {
+        switch self {
+        case .owner: return .manage
+        case .participant: return .participate
+        case .visitor: return .publicPreview
+        }
+    }
+
+    var landingDestination: AtlasDestination {
+        .publicPreview
+    }
+}
+
 enum AtlasSheet: String, Identifiable {
     case createWorld
     case submitWork
@@ -62,8 +93,21 @@ enum AtlasSheet: String, Identifiable {
     case application
     case newTask
     case objectEditor
+    case characterCard
+    case interactionInvite
+    case publicPageEditor
 
     var id: String { rawValue }
+}
+
+enum WorldCreationStage {
+    case story
+    case map
+}
+
+enum WorldCollection: String {
+    case managed = "我管理的世界"
+    case joined = "我加入的世界"
 }
 
 struct AtlasWorld: Identifiable, Hashable {
@@ -100,12 +144,61 @@ struct AtlasSubmission: Identifiable {
         case accepted = "Wiki 候选"
     }
 
+    enum WikiChangeKind: String {
+        case newEntry = "新增条目"
+        case revision = "修改既有条目"
+        case confirmedRelationship = "双方确认关系"
+    }
+
+    struct AuthorCredit: Identifiable, Hashable {
+        let id: String
+        var name: String
+        var avatarSeed: Int
+        var timestamp: String
+        var order: Int
+
+        init(name: String, avatarSeed: Int, timestamp: String, order: Int) {
+            self.id = "\(name)-\(order)-\(timestamp)"
+            self.name = name
+            self.avatarSeed = avatarSeed
+            self.timestamp = timestamp
+            self.order = order
+        }
+    }
+
     let id: String
     var title: String
     var author: String
     var state: State
     var destination: String
     var affectedObjects: [String]
+    var wikiObjectID: String?
+    var wikiChangeKind: WikiChangeKind
+    var authorCredits: [AuthorCredit]
+
+    init(
+        id: String,
+        title: String,
+        author: String,
+        state: State,
+        destination: String,
+        affectedObjects: [String],
+        wikiObjectID: String? = nil,
+        wikiChangeKind: WikiChangeKind = .newEntry,
+        authorCredits: [AuthorCredit]? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.author = author
+        self.state = state
+        self.destination = destination
+        self.affectedObjects = affectedObjects
+        self.wikiObjectID = wikiObjectID
+        self.wikiChangeKind = wikiChangeKind
+        self.authorCredits = authorCredits ?? [
+            AuthorCredit(name: author, avatarSeed: abs(author.hashValue % 9), timestamp: "提交时", order: 0)
+        ]
+    }
 }
 
 @MainActor
@@ -115,12 +208,26 @@ final class AtlasAppModel: ObservableObject {
     @Published var activeWorldID = "mist-letters"
     @Published var selectedObjectID = "LOC-014"
     @Published var selectedTaskID: String?
+    @Published var selectedCharacterID = "char-cen"
     @Published var activeSheet: AtlasSheet?
     @Published var toast: String?
     @Published var creationCompleted = false
     /// 正在创建世界：全屏进入空白地图编辑器（取代旧的引导仪式流）。
     @Published var creatingWorld = false
+    @Published var creationStage: WorldCreationStage = .story
+    @Published var worldCollection: WorldCollection = .managed
+    @Published private(set) var savedMapJSONByWorldID: [String: String] = [:]
     @Published var joinedTaskIDs: Set<String> = []
+    @Published private(set) var rolesByWorldID: [String: ProjectRole] = [
+        "mist-letters": .owner,
+        "ninth-station": .participant,
+        "echo-chart": .visitor,
+        "glasshouse": .participant,
+        "aurora-archive": .visitor,
+        "stellar-echo": .participant,
+        "white-tower": .owner,
+        "salt-beacon": .owner
+    ]
 
     let worlds: [AtlasWorld] = [
         .init(id: "mist-letters", name: "雾海来信",
@@ -211,41 +318,171 @@ final class AtlasAppModel: ObservableObject {
     @Published var submissions: [AtlasSubmission] = [
         .init(id: "SUB-041", title: "第七页日志背面坐标", author: "岑",
               state: .pending, destination: "主线 Wiki",
-              affectedObjects: ["雾港", "夜航路线", "伊莱"]),
+              affectedObjects: ["雾港", "夜航路线", "伊莱"], wikiObjectID: "LOC-014",
+              wikiChangeKind: .revision),
         .init(id: "SUB-042", title: "失声海域速写", author: "白昼",
               state: .pending, destination: "角色作品集",
-              affectedObjects: ["失声海域"]),
+              affectedObjects: ["失声海域"], wikiObjectID: nil,
+              wikiChangeKind: .newEntry),
         .init(id: "SUB-043", title: "岑与伊莱：临时同盟", author: "岑 / 伊莱",
               state: .shared, destination: "角色关系",
-              affectedObjects: ["岑", "伊莱", "夜航守望"])
+              affectedObjects: ["岑", "伊莱", "夜航守望"], wikiObjectID: nil,
+              wikiChangeKind: .confirmedRelationship,
+              authorCredits: [
+                .init(name: "岑", avatarSeed: 1, timestamp: "7 月 24 日 14:18 确认", order: 0),
+                .init(name: "伊莱", avatarSeed: 2, timestamp: "7 月 24 日 15:02 确认", order: 1)
+              ])
     ]
+    /// 企主同意后直接成为企划 Wiki 的正式收录；拒绝项不会保留在企划侧。
+    @Published private(set) var wikiSubmissions: [AtlasSubmission] = []
+    @Published private(set) var addedWikiObjects: [WorldObject] = []
+    @Published var characterApprovals: [CharacterApproval] = CharacterApproval.samples
 
     var activeWorld: AtlasWorld {
         worlds.first(where: { $0.id == activeWorldID }) ?? worlds[0]
     }
 
+    var activeRole: ProjectRole {
+        role(in: activeWorldID)
+    }
+
+    var isActiveWorldArchived: Bool {
+        activeWorld.status == "已结企"
+    }
+
+    var canWriteActiveWorld: Bool {
+        !isActiveWorldArchived
+    }
+
     var selectedObject: WorldObject {
-        WorldObject.samples.first(where: { $0.id == selectedObjectID }) ?? WorldObject.samples[0]
+        allWikiObjects.first(where: { $0.id == selectedObjectID }) ?? WorldObject.samples[0]
     }
 
-    func openWorld(_ world: AtlasWorld, mode: ProjectAccessMode = .participate) {
-        activeWorldID = world.id
-        accessMode = mode
-        destination = .overview
+    var allWikiObjects: [WorldObject] {
+        WorldObject.samples + addedWikiObjects
     }
 
-    func switchMode(_ mode: ProjectAccessMode) {
-        accessMode = mode
-        if mode == .publicPreview {
-            destination = .publicPreview
-        } else if mode == .participate && destination == .review {
-            destination = .overview
-        } else if destination == .publicPreview {
-            destination = .overview
+    func wikiContributions(for objectID: String) -> [AtlasSubmission] {
+        wikiSubmissions.filter { $0.wikiObjectID == objectID }
+    }
+
+    func wikiAuthorCredits(for objectID: String) -> [AtlasSubmission.AuthorCredit] {
+        let contributions = wikiContributions(for: objectID)
+        guard !contributions.isEmpty else {
+            return [.init(name: "岑", avatarSeed: 1, timestamp: "原始档案", order: 0)]
+        }
+
+        var credits: [AtlasSubmission.AuthorCredit] = []
+        for contribution in contributions {
+            if contribution.wikiChangeKind == .revision,
+               !credits.contains(where: { $0.name == "岑" }) {
+                credits.append(.init(name: "岑", avatarSeed: 1, timestamp: "原始档案", order: -1))
+            }
+            for credit in contribution.authorCredits.sorted(by: { $0.order < $1.order })
+            where !credits.contains(where: { $0.name == credit.name }) {
+                credits.append(credit)
+            }
+        }
+        return credits
+    }
+
+    func role(in worldID: String) -> ProjectRole {
+        rolesByWorldID[worldID] ?? .visitor
+    }
+
+    func canAccess(_ destination: AtlasDestination) -> Bool {
+        guard destination.isProjectDestination else { return true }
+        switch activeRole {
+        case .owner:
+            return true
+        case .participant:
+            return destination != .review
+        case .visitor:
+            return destination == .publicPreview ||
+                destination == .canvas ||
+                destination == .wiki ||
+                destination == .assets ||
+                destination == .tasks
         }
     }
 
+    func navigate(to destination: AtlasDestination) {
+        guard canAccess(destination) else {
+            showToast("当前企划身份无权访问该页面")
+            self.destination = activeRole.landingDestination
+            return
+        }
+        self.destination = destination
+    }
+
+    func openWorld(_ world: AtlasWorld) {
+        activeWorldID = world.id
+        let resolvedRole = role(in: world.id)
+        accessMode = world.status == "已结企" ? .publicPreview : resolvedRole.accessMode
+        destination = .publicPreview
+    }
+
+    func returnToRoleExperience() {
+        accessMode = isActiveWorldArchived ? .publicPreview : activeRole.accessMode
+        destination = .publicPreview
+    }
+
+    func registerCreatedWorld(_ worldID: String) {
+        rolesByWorldID[worldID] = .owner
+    }
+
+    func savedMapJSON(for worldID: String) -> String? {
+        if let cached = savedMapJSONByWorldID[worldID] {
+            return cached
+        }
+        guard let data = try? Data(contentsOf: mapFileURL(for: worldID)) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    func saveMapJSON(_ json: String, for worldID: String) {
+        guard !json.isEmpty else { return }
+        savedMapJSONByWorldID[worldID] = json
+        let url = mapFileURL(for: worldID)
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? json.data(using: .utf8)?.write(to: url, options: .atomic)
+    }
+
+    func beginWorldCreation() {
+        creationStage = .story
+        creatingWorld = true
+    }
+
+    func showWorldCollection(_ collection: WorldCollection) {
+        worldCollection = collection
+        let targetRole: ProjectRole = collection == .managed ? .owner : .participant
+        if let firstWorld = worlds.first(where: { role(in: $0.id) == targetRole }) {
+            activeWorldID = firstWorld.id
+            accessMode = targetRole.accessMode
+        }
+        destination = .worlds
+    }
+
+    private func mapFileURL(for worldID: String) -> URL {
+        let base = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first ?? FileManager.default.temporaryDirectory
+        return base
+            .appendingPathComponent("Atlas", isDirectory: true)
+            .appendingPathComponent("Maps", isDirectory: true)
+            .appendingPathComponent("\(worldID).json")
+    }
+
     func joinTask(_ task: AtlasTask) {
+        guard canWriteActiveWorld else {
+            showToast("该企划已封存，不能再承接任务")
+            return
+        }
         joinedTaskIDs.insert(task.id)
         selectedTaskID = task.id
         showToast("已用当前角色加入「\(task.title)」")
@@ -261,6 +498,103 @@ final class AtlasAppModel: ObservableObject {
             showToast("已进入 Wiki 候选，等待正式发布")
         default:
             showToast("审核状态已更新")
+        }
+    }
+
+    func rejectSubmission(_ submissionID: String) {
+        guard canWriteActiveWorld else {
+            showToast("该企划已封存，审核操作已关闭")
+            return
+        }
+        guard submissions.contains(where: { $0.id == submissionID }) else { return }
+        submissions.removeAll { $0.id == submissionID }
+        showToast("已拒绝；企划内不保留该提交")
+    }
+
+    func approveSubmission(_ submissionID: String) {
+        guard canWriteActiveWorld else {
+            showToast("该企划已封存，审核操作已关闭")
+            return
+        }
+        guard let submission = submissions.first(where: { $0.id == submissionID }) else { return }
+        var archived = submission
+        if archived.wikiChangeKind == .revision {
+            archived.wikiObjectID = archived.wikiObjectID ?? selectedObjectID
+        } else {
+            let prefix = archived.wikiChangeKind == .confirmedRelationship ? "REL" : "NEW"
+            let objectID = "\(prefix)-\(String(format: "%03d", addedWikiObjects.count + 1))"
+            let objectType: WorldObjectType =
+                archived.wikiChangeKind == .confirmedRelationship ? .relationship : .work
+            addedWikiObjects.append(
+                WorldObject(
+                    id: objectID,
+                    type: objectType,
+                    name: archived.title,
+                    summary: archived.affectedObjects.isEmpty
+                        ? archived.destination
+                        : "关联：\(archived.affectedObjects.joined(separator: "、"))",
+                    status: .official,
+                    version: 1,
+                    linkCount: archived.affectedObjects.count,
+                    aiAssisted: false
+                )
+            )
+            archived.wikiObjectID = objectID
+            selectedObjectID = objectID
+        }
+        wikiSubmissions.append(archived)
+        submissions.removeAll { $0.id == submissionID }
+        showToast("已同意并写入 Wiki")
+    }
+
+    func approveCharacterInteraction(_ approvalID: String) {
+        guard canWriteActiveWorld else {
+            showToast("该企划已封存，互动确认已关闭")
+            return
+        }
+        guard let approval = characterApprovals.first(where: { $0.id == approvalID }) else { return }
+        var confirmedSubmission = approval.submission
+        if let waitingIndex = confirmedSubmission.authorCredits.firstIndex(where: {
+            $0.timestamp == "等待确认"
+        }) {
+            confirmedSubmission.authorCredits[waitingIndex].name = approval.characterName
+            confirmedSubmission.authorCredits[waitingIndex].timestamp = "刚刚确认"
+        }
+        submissions.insert(confirmedSubmission, at: 0)
+        characterApprovals.removeAll { $0.id == approvalID }
+        showToast("角色确认已通过，内容进入企主审核")
+    }
+
+    func rejectCharacterInteraction(_ approvalID: String) {
+        guard canWriteActiveWorld else {
+            showToast("该企划已封存，互动确认已关闭")
+            return
+        }
+        characterApprovals.removeAll { $0.id == approvalID }
+        showToast("已拒绝该角色互动；不会写入企划记录")
+    }
+
+    func submitWorkForReview(_ submission: AtlasSubmission, requiresCharacterApproval: Bool) {
+        guard canWriteActiveWorld else {
+            showToast("该企划已封存，不能再提交作品")
+            return
+        }
+        if requiresCharacterApproval {
+            characterApprovals.insert(
+                CharacterApproval(
+                    id: "CHAR-REV-\(characterApprovals.count + 1)",
+                    characterName: "伊莱",
+                    requester: submission.author,
+                    summary: submission.title,
+                    permissionConcern: "涉及角色关系与共同经历，需要角色拥有者确认。",
+                    submission: submission
+                ),
+                at: 0
+            )
+            showToast("已发送给关联角色拥有者确认")
+        } else {
+            submissions.insert(submission, at: 0)
+            showToast("提交已进入企主审核")
         }
     }
 

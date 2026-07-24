@@ -54,16 +54,39 @@
 
   /* ---------- project cards (zoomed-in morph) ---------- */
   #cards{position:fixed;inset:0;z-index:35;pointer-events:none;overflow:hidden;opacity:1;transition:opacity .42s ease}
-  .star-card{position:absolute;top:0;left:0;z-index:35;width:196px;pointer-events:none;
+  .star-card{position:absolute;top:0;left:0;z-index:35;width:240px;pointer-events:none;
     transform:translate(-50%,-100%);transform-origin:50% 100%;
-    background:transparent;border:0;border-radius:12px;padding:12px 13px 11px;
+    box-sizing:border-box;background:transparent;
+    border:1px solid rgba(255,255,255,.34);border-radius:12px;padding:0;overflow:visible;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.44),
+      inset 1px 0 0 rgba(255,255,255,.12),
+      inset -1px 0 0 rgba(255,255,255,.10),
+      inset 0 -1px 0 rgba(255,255,255,.16),
+      0 14px 38px rgba(0,0,0,.42)!important;
     opacity:0;transition:border-color .2s ease, box-shadow .2s ease;will-change:transform,opacity}
-  .star-card[data-lg="panel"]{z-index:35;padding:12px 13px 11px;text-align:left}
+  .star-card[data-lg="panel"]{z-index:35;padding:0;text-align:left}
+  /* WebGL canvas 会为阴影向四周扩 20px；只裁掉这圈矩形采样边，
+     避免右上角露出方形尖角，玻璃主体仍保持实时折射。 */
+  .star-card>canvas{clip-path:inset(20px round 12px)}
+  .star-card>.lg-label{overflow:hidden;border-radius:11px;color:#fff;
+    text-shadow:0 1px 7px rgba(0,0,0,.72)}
   .star-card::after{content:"";position:absolute;left:50%;bottom:-15px;width:1px;height:15px;
     background:linear-gradient(180deg,rgba(255,255,255,.48),transparent)}
   .star-card::before{content:"";position:absolute;left:calc(50% - 2.5px);bottom:-18px;width:5px;height:5px;border-radius:50%;
     background:var(--signal);box-shadow:0 0 10px rgba(255,255,255,.6)}
-  .star-card h4{font-size:14.5px;font-weight:700;letter-spacing:.05em;margin-bottom:4px;display:flex;align-items:center;gap:7px}
+  .star-card .card-banner{height:82px;margin:0;border-radius:11px 11px 0 0;
+    position:relative;overflow:hidden;border-bottom:1px solid rgba(255,255,255,.12)}
+  .star-card .card-content{padding:12px 13px 11px}
+  .star-card .card-banner::before{content:"";position:absolute;width:110px;height:110px;border-radius:50%;
+    right:-22px;top:-42px;background:rgba(255,255,255,.16);filter:blur(2px)}
+  .star-card .card-banner::after{content:"ATLAS WORLD";position:absolute;left:12px;bottom:9px;
+    font-size:8px;letter-spacing:.24em;color:rgba(255,255,255,.7)}
+  .star-card .banner-0{background:linear-gradient(125deg,rgba(23,53,82,.72),rgba(61,86,136,.60) 58%,rgba(158,109,141,.56))}
+  .star-card .banner-1{background:linear-gradient(125deg,rgba(40,34,62,.72),rgba(106,69,111,.60) 58%,rgba(209,120,111,.56))}
+  .star-card .banner-2{background:linear-gradient(125deg,rgba(18,63,66,.72),rgba(40,116,107,.60) 58%,rgba(130,155,103,.56))}
+  .star-card .banner-3{background:linear-gradient(125deg,rgba(68,53,31,.72),rgba(150,100,59,.60) 58%,rgba(211,165,100,.56))}
+  .star-card .banner-4{background:linear-gradient(125deg,rgba(31,41,69,.72),rgba(71,91,142,.60) 58%,rgba(139,119,187,.56))}
+  .star-card h4{font-size:14.5px;font-weight:700;letter-spacing:.05em;margin-bottom:5px;display:flex;align-items:center;gap:7px}
   .star-card h4 i{width:6px;height:6px;border-radius:50%;flex:none}
   .star-card .hook{font-size:11.5px;color:var(--muted);line-height:1.55;margin-bottom:9px;
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -72,7 +95,17 @@
     border:1px solid var(--p1-glass-border);color:#d7d9df;background:var(--p1-glass-fill);
     box-shadow:var(--p1-glass-shadow)}
   .star-card .meta span.st{border-color:rgba(143,212,168,.45);color:#a9e5bd}
+  .star-card .card-byline{display:flex;justify-content:space-between;gap:8px;margin-top:9px;
+    padding-top:8px;border-top:1px solid rgba(255,255,255,.09);
+    color:var(--muted);font-size:9.5px;letter-spacing:.03em}
   .dot-recruit{background:#8fd4a8}.dot-live{background:#7aa8ff}.dot-pre{background:#e8c47a}.dot-done{background:#8a8f99}
+  body.card-visible .star-card{pointer-events:auto;cursor:pointer}
+  body.card-visible .star-card:hover{border-color:rgba(255,255,255,.52);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.58),
+      inset 1px 0 0 rgba(255,255,255,.16),
+      inset -1px 0 0 rgba(255,255,255,.14),
+      inset 0 -1px 0 rgba(255,255,255,.20),
+      0 17px 46px rgba(0,0,0,.48)!important}
 
   /* ---------- browse nav (swipe between worlds, camera follows) ---------- */
   .browse-nav-button{position:fixed;bottom:19px;z-index:50;width:42px;height:42px;
@@ -141,7 +174,7 @@
   body.detail-visible .browse-nav-button,body.detail-visible #bnCount{opacity:0 !important;pointer-events:none}
   body.detail-visible .star-card,body.simple-hidden .star-card{opacity:0 !important}
 
-  @media(max-width:640px){.star-card{width:168px}}
+  @media(max-width:640px){.star-card{width:204px}.star-card .card-banner{height:68px}}
 </style>
 </head>
 <body>
@@ -437,10 +470,39 @@ rig.tween = { t:0, dur:4.6, ease:easeInOut,
 
 /* ---------------- input ---------------- */
 let dragging=false, px=0, py=0, pinch=0;
+let worldSnapTimer=null;
 const explored = () => document.body.classList.add('explored');
+
+function nearestWorldToCenter(){
+  let nearest=null, nearestDistance=Infinity;
+  for(const w of worlds){
+    projV.copy(w.pos).project(camera);
+    if(projV.z>1||projV.z<-1) continue;
+    const x=(projV.x*0.5+0.5)*viewportWidth;
+    const y=(-projV.y*0.5+0.5)*viewportHeight;
+    const distance=Math.hypot(x-viewportWidth/2,y-viewportHeight/2);
+    if(distance<nearestDistance){ nearest=w; nearestDistance=distance; }
+  }
+  return nearest;
+}
+
+function scheduleWorldSnap(delay=180){
+  clearTimeout(worldSnapTimer);
+  if(focusMode || rig.dist>=CARD_FAR) return;
+  worldSnapTimer=setTimeout(()=>{
+    if(dragging || rig.tween || focusMode) return;
+    const target=nearestWorldToCenter();
+    if(!target) return;
+    rig.vTheta=0;
+    rig.vPhi=0;
+    navLock=target;
+    flyToWorld(target,55);
+  },delay);
+}
 
 canvas.addEventListener('pointerdown', e=>{
   if(focusMode) return;
+  clearTimeout(worldSnapTimer);
   dragging=true; px=e.clientX; py=e.clientY; rig.idle=0; canvas.classList.add('dragging');
 });
 addEventListener('pointermove', e=>{
@@ -453,19 +515,32 @@ addEventListener('pointermove', e=>{
   }
   hoverCheck(e.clientX, e.clientY);
 });
-addEventListener('pointerup', ()=>{ dragging=false; canvas.classList.remove('dragging'); });
-let navAcc = 0, navTime = 0;
+addEventListener('pointerup', ()=>{
+  dragging=false;
+  canvas.classList.remove('dragging');
+  scheduleWorldSnap();
+});
+let navAcc = 0, wheelGestureTriggered = false, wheelGestureTimer = null;
 canvas.addEventListener('wheel', e=>{
   if(focusMode) return;
   e.preventDefault();
   rig.userDrove = true; explored();
   // 横向滚动（触控板双指横滑）→ 切换世界，星图跟随飞行
   if(Math.abs(e.deltaX) > Math.abs(e.deltaY) && rig.dist < CARD_FAR){
-    const now = performance.now();
-    if(now > navTime){
+    clearTimeout(wheelGestureTimer);
+    wheelGestureTimer=setTimeout(()=>{
+      wheelGestureTriggered=false;
+      navAcc=0;
+    },180);
+    if(!wheelGestureTriggered){
       navAcc += e.deltaX;
-      if(Math.abs(navAcc) > 50){ navTime = now + 600; navStep(Math.sign(navAcc)); navAcc = 0; }
+      if(Math.abs(navAcc)>42){
+        wheelGestureTriggered=true;
+        navStep(Math.sign(navAcc));
+        navAcc=0;
+      }
     }
+    scheduleWorldSnap(720);
     return;
   }
   rig.tween = null;
@@ -521,13 +596,13 @@ canvas.addEventListener('click', e=>{
   if(focusMode) return;
   if(Math.hypot(e.clientX-downX, e.clientY-downY)>6) return; // was a drag
   const nearby=worldAtScreen(e.clientX,e.clientY);
-  if(nearby){beginFocus(nearby);return;}
+  if(nearby){activateWorldStar(nearby);return;}
   mouseV.set(e.clientX/viewportWidth*2-1, -(e.clientY/viewportHeight)*2+1);
   raycaster.setFromCamera(mouseV, camera);
   const hits = raycaster.intersectObjects(worlds.map(w=>w.sp));
   if(hits.length){
     const w = worlds[hits[0].object.userData.worldIndex];
-    beginFocus(w);
+    activateWorldStar(w);
   }
 });
 function flyToWorld(w, dist=60){
@@ -573,13 +648,14 @@ function hoverCheck(x,y){
 
 /* ---------------- project cards ---------------- */
 const starmapRoot = document.getElementById('starmap-root');
+let starGlassInstance = null;
 const focusCard = document.createElement('div');
 focusCard.className='star-card';
 focusCard.dataset.lg='panel';
 focusCard.dataset.lgConfig=JSON.stringify({
-  blurAmount:0.24,refraction:0.92,chromAberration:0.08,edgeHighlight:0.11,
-  specular:0.12,fresnel:1,cornerRadius:12,zRadius:18,brightness:-0.24,
-  shadowOpacity:0.34,shadowSpread:14,floating:false
+  blurAmount:0.30,refraction:1.22,chromAberration:0.18,edgeHighlight:0.34,
+  specular:0.38,fresnel:1,cornerRadius:12,zRadius:30,brightness:-0.20,
+  shadowOpacity:0.46,shadowSpread:18,shadowOffsetY:5,floating:false
 });
 starmapRoot.appendChild(focusCard);
 let renderedWorld = null;
@@ -587,9 +663,13 @@ function renderFocusCard(w){
   if(renderedWorld===w) return;
   const st = STATUS[w.data.status];
   focusCard.innerHTML = `<div class="lg-label">
-    <h4><i class="${st.cls}"></i>${w.data.name}</h4>
-    <p class="hook">${w.data.hook}</p>
-    <div class="meta"><span class="st">${st.label}</span><span>${w.data.type}</span><span>${w.data.members}人</span></div>
+    <div class="card-banner banner-${w.data.c}"></div>
+    <div class="card-content">
+      <h4><i class="${st.cls}"></i>${w.data.name}</h4>
+      <p class="hook">${w.data.hook}</p>
+      <div class="meta"><span class="st">${st.label}</span><span>${w.data.type}</span><span>${w.data.members} 人</span></div>
+      <div class="card-byline"><span>企主 · ${w.data.host}</span><span>${w.data.deadline==='—' ? '长期企划' : w.data.deadline}</span></div>
+    </div>
   </div>`;
   renderedWorld = w;
 }
@@ -597,6 +677,27 @@ function renderFocusCard(w){
 const CARD_FAR = 130, CARD_NEAR = 70;   // zoom thresholds
 const projV = new THREE.Vector3();
 let focusedWorld = null;
+
+/* 星点采用两段式进入：
+   未召唤预览卡时，第一次点击只聚焦并展示卡片；
+   当前卡片已稳定显示时，再点同一星点才进入企划详情。 */
+function activateWorldStar(w){
+  const cardIsVisible =
+    focusedWorld===w && document.body.classList.contains('card-visible');
+  if(cardIsVisible){
+    openAtlasWorld(w.data.name);
+    return;
+  }
+  navLock=w;
+  renderFocusCard(w);
+  flyToWorld(w,55);
+}
+
+focusCard.addEventListener('click', event=>{
+  if(focusMode || !focusedWorld) return;
+  event.stopPropagation();
+  openAtlasWorld(focusedWorld.data.name);
+});
 
 /* 中距：只聚焦屏幕中心最近的一个世界（单卡，永不堆叠） */
 function updateCards(){
@@ -660,8 +761,7 @@ function navStep(dir){
   let wi = navLock ? worlds.indexOf(navLock)
          : focusedWorld ? worlds.indexOf(focusedWorld) : 0;
   let ci = chain.indexOf(wi); if(ci<0) ci=0;
-  const ni = THREE.MathUtils.clamp(ci+dir, 0, chain.length-1);
-  if(ni===ci) return;
+  const ni = (ci+dir+chain.length)%chain.length;
   flyToWorld(worlds[chain[ni]], 55);
 }
 
@@ -906,6 +1006,7 @@ function animate(){
   });
 
   updateCards();
+  if(starGlassInstance) starGlassInstance.markChanged(focusCard);
   renderer.render(scene, camera);
 
   if(firstFrame){ firstFrame=false; setTimeout(()=>document.body.classList.add('ready'), 300); }
@@ -919,7 +1020,9 @@ animate();
 requestAnimationFrame(()=>{
   renderFocusCard(worlds[0]);
   renderDetail(worlds[0]);
-  AtlasLG.init().catch(error=>console.error('Liquid Glass initialization failed:',error));
+  AtlasLG.init()
+    .then(instances=>{ starGlassInstance=instances.get(starmapRoot) || null; })
+    .catch(error=>console.error('Liquid Glass initialization failed:',error));
 });
 </script>
 </body>

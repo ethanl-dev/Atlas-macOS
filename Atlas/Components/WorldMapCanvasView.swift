@@ -14,8 +14,10 @@ import WebKit
 struct WorldMapCanvasView: NSViewRepresentable {
     /// "create"（空白起步）或 "manage"（管理已有世界）。目前两者都从空白地图开始。
     var mode: String = "create"
+    var canEdit: Bool = false
+    var initialMapJSON: String?
     var onExit: () -> Void = {}
-    var onSave: (_ locations: Int) -> Void = { _ in }
+    var onSave: (_ locations: Int, _ mapJSON: String) -> Void = { _, _ in }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onExit: onExit, onSave: onSave)
@@ -27,11 +29,29 @@ struct WorldMapCanvasView: NSViewRepresentable {
         controller.add(context.coordinator, name: "atlasBridge")
         // 在页面脚本执行前注入模式标记，供编辑器读取。
         let modeScript = WKUserScript(
-            source: "window.ATLAS_MODE=\"\(mode)\";",
+            source: """
+            window.ATLAS_MODE="\(mode)";
+            window.ATLAS_CAN_EDIT=\(canEdit ? "true" : "false");
+            """,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         )
         controller.addUserScript(modeScript)
+        if let initialMapJSON,
+           let mapData = initialMapJSON.data(using: .utf8) {
+            let encoded = mapData.base64EncodedString()
+            controller.addUserScript(
+                WKUserScript(
+                    source: """
+                    window.ATLAS_INITIAL_MAP = JSON.parse(
+                      decodeURIComponent(escape(atob("\(encoded)")))
+                    );
+                    """,
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: true
+                )
+            )
+        }
         configuration.userContentController = controller
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -68,9 +88,9 @@ struct WorldMapCanvasView: NSViewRepresentable {
 
     final class Coordinator: NSObject, WKScriptMessageHandler {
         var onExit: () -> Void
-        var onSave: (_ locations: Int) -> Void
+        var onSave: (_ locations: Int, _ mapJSON: String) -> Void
 
-        init(onExit: @escaping () -> Void, onSave: @escaping (_ locations: Int) -> Void) {
+        init(onExit: @escaping () -> Void, onSave: @escaping (_ locations: Int, _ mapJSON: String) -> Void) {
             self.onExit = onExit
             self.onSave = onSave
         }
@@ -84,7 +104,8 @@ struct WorldMapCanvasView: NSViewRepresentable {
                 onExit()
             case "save":
                 let locations = payload["locations"] as? Int ?? 0
-                onSave(locations)
+                let mapJSON = payload["mapJSON"] as? String ?? ""
+                onSave(locations, mapJSON)
             default:
                 break
             }

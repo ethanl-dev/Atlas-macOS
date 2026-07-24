@@ -38,7 +38,7 @@ struct AtlasButtonStyle: ButtonStyle {
 
     private var foreground: Color {
         switch kind {
-        case .primary: return AtlasColor.inverse
+        case .primary: return .white
         case .glass:   return AtlasColor.textPrimary
         case .ghost:   return AtlasColor.textSecondary
         }
@@ -48,9 +48,19 @@ struct AtlasButtonStyle: ButtonStyle {
     private func background(shape: RoundedRectangle, pressed: Bool) -> some View {
         switch kind {
         case .primary:
-            shape.fill(Color.white.opacity(pressed ? 0.86 : 1))
+            shape.fill(
+                LinearGradient(
+                    colors: [
+                        AtlasColor.auroraBlue.opacity(pressed ? 0.76 : 0.96),
+                        AtlasColor.auroraViolet.opacity(pressed ? 0.72 : 0.90)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .shadow(color: AtlasColor.auroraBlue.opacity(0.22), radius: 12, y: 5)
         case .glass:
-            Color.clear.atlasGlass(shape, interactive: true)
+            Color.clear.atlasChromaticGlass(shape, tint: AtlasColor.auroraBlue.opacity(0.36), interactive: true)
         case .ghost:
             Color.clear
         }

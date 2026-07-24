@@ -6,43 +6,98 @@ struct RootView: View {
     var body: some View {
         Group {
             if model.creatingWorld {
-                // 创建世界 = 直接进入空白地图编辑器（不再有引导仪式流）
-                WorldMapCanvasView(
-                    mode: "create",
-                    onExit: {
-                        withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = false }
-                    },
-                    onSave: { _ in
-                        model.creationCompleted = true
-                        model.accessMode = .manage
-                        model.destination = .canvas
-                        withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = false }
+                Group {
+                    if model.creationStage == .story {
+                        WorldCreationFlow(
+                            model: model,
+                            onClose: {
+                                withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = false }
+                            },
+                            onComplete: {
+                                model.creationCompleted = true
+                                model.registerCreatedWorld(model.activeWorldID)
+                                model.accessMode = .manage
+                                model.destination = .canvas
+                                withAnimation(.snappy(duration: 0.32)) {
+                                    model.creatingWorld = false
+                                }
+                            }
+                        )
+                    } else {
+                        // React 原型的路径：世界概念确认后，进入空白地图尺寸设置、绘制与保存。
+                        WorldMapCanvasView(
+                            mode: "create",
+                            canEdit: true,
+                            initialMapJSON: nil,
+                            onExit: {
+                                withAnimation(.snappy(duration: 0.32)) { model.creationStage = .story }
+                            },
+                            onSave: { _, mapJSON in
+                                model.saveMapJSON(mapJSON, for: model.activeWorldID)
+                                model.creationCompleted = true
+                                model.registerCreatedWorld(model.activeWorldID)
+                                model.accessMode = .manage
+                                model.destination = .canvas
+                                withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = false }
+                            }
+                        )
+                        .ignoresSafeArea()
                     }
-                )
-                .ignoresSafeArea()
+                }
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             } else if model.destination == .discover {
                 DiscoverView(model: model) {
-                    withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = true }
+                    withAnimation(.snappy(duration: 0.32)) { model.beginWorldCreation() }
                 }
                 .transition(.opacity)
+            } else if model.destination == .profile {
+                ProfileView(model: model)
+                    .transition(.opacity)
+            } else if model.destination == .worlds {
+                // 世界集合属于账号层级；选中具体企划后，才进入带企划菜单的工作区。
+                WorldsHomeView(model: model)
+                    .transition(.opacity)
             } else {
                 projectShell
+                    .transition(
+                        .opacity.combined(
+                            with: .scale(scale: 1.012, anchor: .center)
+                        )
+                    )
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            if !model.creatingWorld &&
+                (model.destination == .discover ||
+                 model.destination == .profile ||
+                 model.destination == .worlds) {
+                Group {
+                    if model.destination == .discover {
+                        ProfileAvatarDock(model: model)
+                    } else {
+                        ProfileBrandDock(model: model)
+                    }
+                }
+                .padding(.leading, 24)
+                .padding(.bottom, 24)
             }
         }
         .animation(.snappy(duration: 0.32), value: model.creatingWorld)
+        .animation(.easeInOut(duration: 0.42), value: model.destination)
+        .onChange(of: model.destination) { _, destination in
+            guard !model.canAccess(destination) else { return }
+            model.navigate(to: destination)
+        }
         .sheet(item: $model.activeSheet) { sheet in
             sheetView(sheet)
         }
     }
 
     private var projectShell: some View {
-        NavigationSplitView {
-            AtlasAppSidebar(model: model)
-                .navigationSplitViewColumnWidth(min: 210, ideal: 224, max: 252)
-        } detail: {
+        ZStack {
             destinationView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(AtlasCanvasBackground())
                 .overlay(alignment: .top) {
                     if let toast = model.toast {
                         ToastView(message: toast)
@@ -51,8 +106,20 @@ struct RootView: View {
                     }
                 }
                 .animation(.snappy(duration: 0.24), value: model.toast)
+
+            VStack {
+                Spacer()
+                HStack(alignment: .bottom) {
+                    ProfileBrandDock(model: model)
+                    Spacer()
+                    ProjectQuickMenu(model: model)
+                }
+            }
+            .padding(.leading, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 24)
+            .padding(.trailing, 12)
         }
-        .navigationTitle("")
     }
 
     @ViewBuilder
@@ -60,23 +127,20 @@ struct RootView: View {
         switch model.destination {
         case .discover:
             EmptyView()
+        case .profile:
+            EmptyView()
         case .worlds:
-            WorldsHomeView(model: model)
+            EmptyView()
         case .overview:
-            ProjectOverviewView(model: model)
+            PublicProjectView(model: model)
         case .canvas:
-            WorldMapCanvasView(
-                mode: "manage",
-                onExit: { model.destination = .overview },
-                onSave: { locations in model.showToast("地图已保存 · \(locations) 个地点") }
-            )
-            .ignoresSafeArea()
+            WorldCanvasPlaceholderView(model: model)
         case .wiki:
             WorldWikiView(model: model)
         case .assets:
             AssetLibraryView(model: model)
         case .tasks:
-            InteractionHubView(model: model)
+            ParticipationHubView(model: model)
         case .review:
             ReviewQueueView(model: model)
         case .publicPreview:
@@ -102,6 +166,12 @@ struct RootView: View {
             NewTaskSheet(model: model)
         case .objectEditor:
             ObjectEditorSheet(model: model)
+        case .characterCard:
+            CharacterCardSheet(model: model)
+        case .interactionInvite:
+            InteractionInviteSheet(model: model)
+        case .publicPageEditor:
+            PublicPageEditorSheet(model: model)
         }
     }
 }

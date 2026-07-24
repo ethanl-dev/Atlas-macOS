@@ -3,7 +3,6 @@ import SwiftUI
 struct AtlasAppSidebar: View {
     @ObservedObject var model: AtlasAppModel
 
-    private let globalItems: [AtlasDestination] = [.discover, .worlds, .inbox]
     private let projectItems: [AtlasDestination] = [
         .overview, .canvas, .wiki, .assets, .tasks, .review, .publicPreview
     ]
@@ -14,11 +13,29 @@ struct AtlasAppSidebar: View {
             navigation
             Spacer(minLength: AtlasSpacing.l)
             activeProject
+            Divider().overlay(AtlasColor.borderSubtle)
+            accountEntry
         }
         .padding(AtlasSpacing.m)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(AtlasColor.canvas.opacity(0.96))
+        .background(Color.black.opacity(0.70))
         .background(AtlasCanvasBackground())
+    }
+
+    private var accountEntry: some View {
+        HStack(spacing: AtlasSpacing.s) {
+            AtlasProfileMenu(model: model)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("岑")
+                    .font(AtlasFont.label)
+                Text("账号与世界")
+                    .font(AtlasFont.monoSmall)
+                    .foregroundStyle(AtlasColor.textTertiary)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, AtlasSpacing.s)
+        .padding(.top, 2)
     }
 
     private var brand: some View {
@@ -44,30 +61,15 @@ struct AtlasAppSidebar: View {
     }
 
     private var navigation: some View {
-        VStack(alignment: .leading, spacing: AtlasSpacing.l) {
-            SidebarGroup(title: "ATLAS") {
-                ForEach(globalItems) { item in
-                    SidebarDestinationButton(
-                        item: item,
-                        selected: model.destination == item
-                    ) {
-                        model.destination = item
-                    }
-                }
-            }
-
-            SidebarGroup(title: model.activeWorld.name.uppercased()) {
-                ForEach(visibleProjectItems) { item in
-                    SidebarDestinationButton(
-                        item: item,
-                        selected: model.destination == item,
-                        badge: item == .review ? "\(model.submissions.filter { $0.state == .pending || $0.state == .shared }.count)" : nil
-                    ) {
-                        model.destination = item
-                        if item == .publicPreview {
-                            model.accessMode = .publicPreview
-                        }
-                    }
+        SidebarGroup(title: model.activeWorld.name.uppercased()) {
+            ForEach(visibleProjectItems) { item in
+                SidebarDestinationButton(
+                    item: item,
+                    title: sidebarTitle(for: item),
+                    selected: model.destination == item,
+                    badge: item == .review ? "\(model.submissions.filter { $0.state == .pending || $0.state == .shared }.count)" : nil
+                ) {
+                    model.navigate(to: item)
                 }
             }
         }
@@ -75,8 +77,26 @@ struct AtlasAppSidebar: View {
 
     private var visibleProjectItems: [AtlasDestination] {
         projectItems.filter { item in
-            item != .review || model.accessMode == .manage
+            switch model.activeRole {
+            case .owner:
+                return true
+            case .participant:
+                return item != .review
+            case .visitor:
+                return item == .publicPreview ||
+                    item == .canvas ||
+                    item == .wiki ||
+                    item == .assets ||
+                    item == .tasks
+            }
         }
+    }
+
+    private func sidebarTitle(for item: AtlasDestination) -> String {
+        if item == .publicPreview && model.activeRole == .visitor {
+            return "企划详情"
+        }
+        return item.rawValue
     }
 
     private var activeProject: some View {
@@ -100,45 +120,23 @@ struct AtlasAppSidebar: View {
                 Spacer()
             }
 
-            if model.accessMode != .publicPreview {
-                HStack(spacing: AtlasSpacing.xs) {
-                    ForEach([ProjectAccessMode.participate, .manage]) { mode in
-                        Button {
-                            withAnimation(.snappy(duration: 0.24)) {
-                                model.switchMode(mode)
-                            }
-                        } label: {
-                            Label(mode.rawValue, systemImage: mode.symbol)
-                                .font(AtlasFont.caption)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 6)
-                                .foregroundStyle(model.accessMode == mode ? AtlasColor.inverse : AtlasColor.textSecondary)
-                                .background {
-                                    if model.accessMode == mode {
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                            .fill(Color.white)
-                                    }
-                                }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(3)
-                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: AtlasRadius.control, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: AtlasRadius.control, style: .continuous).stroke(AtlasColor.borderSubtle))
-            } else {
-                Button {
-                    model.switchMode(.manage)
-                } label: {
-                    Label("返回管理模式", systemImage: "arrow.uturn.backward")
-                        .font(AtlasFont.caption)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.atlas(.glass))
-            }
+            Label(model.activeRole.rawValue, systemImage: model.activeRole.symbol)
+                .font(AtlasFont.caption)
+                .foregroundStyle(AtlasColor.textPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .atlasChromaticGlass(Capsule(), tint: roleTint)
         }
         .padding(AtlasSpacing.s)
         .atlasGlass(RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous))
+    }
+
+    private var roleTint: Color {
+        switch model.activeRole {
+        case .owner: return AtlasColor.auroraAmber
+        case .participant: return AtlasColor.auroraMint
+        case .visitor: return AtlasColor.auroraViolet
+        }
     }
 }
 
@@ -159,6 +157,7 @@ private struct SidebarGroup<Content: View>: View {
 
 private struct SidebarDestinationButton: View {
     var item: AtlasDestination
+    var title: String
     var selected: Bool
     var badge: String?
     var action: () -> Void
@@ -170,7 +169,7 @@ private struct SidebarDestinationButton: View {
                 Image(systemName: item.symbol)
                     .font(.system(size: 13, weight: .medium))
                     .frame(width: 18)
-                Text(item.rawValue)
+                Text(title)
                     .font(AtlasFont.label)
                 Spacer()
                 if let badge {

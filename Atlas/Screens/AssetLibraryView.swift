@@ -19,11 +19,21 @@ struct AssetLibraryView: View {
             header
             Divider().overlay(AtlasColor.borderSubtle)
 
-            HSplitView {
-                library
-                    .frame(minWidth: 520)
-                preview
-                    .frame(minWidth: 280, idealWidth: 340, maxWidth: 420)
+            GeometryReader { proxy in
+                if proxy.size.width >= 820 {
+                    HSplitView {
+                        library.frame(minWidth: 460)
+                        preview.frame(minWidth: 280, idealWidth: 340, maxWidth: 420)
+                    }
+                } else {
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            library.frame(minHeight: 520)
+                            Divider().overlay(AtlasColor.borderSubtle)
+                            preview.frame(minHeight: 430)
+                        }
+                    }
+                }
             }
         }
         .background(AtlasCanvasBackground())
@@ -51,19 +61,21 @@ struct AssetLibraryView: View {
                     .foregroundStyle(AtlasColor.textSecondary)
             }
             Spacer()
-            Button {
-                model.showToast("已创建空白文本资产")
-            } label: {
-                AtlasButtonLabel(title: "新建文本", systemImage: "doc.badge.plus")
-            }
-            .buttonStyle(.atlas(.glass))
+            if model.activeRole == .owner && model.canWriteActiveWorld {
+                Button {
+                    model.showToast("已创建空白文本资产")
+                } label: {
+                    AtlasButtonLabel(title: "新建文本", systemImage: "doc.badge.plus")
+                }
+                .buttonStyle(.atlas(.glass))
 
-            Button {
-                importing = true
-            } label: {
-                AtlasButtonLabel(title: "上传文件", systemImage: "square.and.arrow.up")
+                Button {
+                    importing = true
+                } label: {
+                    AtlasButtonLabel(title: "上传文件", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.atlas(.primary))
             }
-            .buttonStyle(.atlas(.primary))
         }
         .padding(AtlasSpacing.xl)
     }

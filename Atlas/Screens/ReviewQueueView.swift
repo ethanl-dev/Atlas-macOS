@@ -4,8 +4,12 @@ struct ReviewQueueView: View {
     @ObservedObject var model: AtlasAppModel
     @State private var selectedSubmissionID = "SUB-041"
 
-    private var selectedSubmission: AtlasSubmission {
-        model.submissions.first(where: { $0.id == selectedSubmissionID }) ?? model.submissions[0]
+    private var pendingSubmissions: [AtlasSubmission] {
+        model.submissions.filter { $0.state == .pending || $0.state == .shared }
+    }
+
+    private var selectedSubmission: AtlasSubmission? {
+        model.submissions.first(where: { $0.id == selectedSubmissionID }) ?? pendingSubmissions.first
     }
 
     var body: some View {
@@ -13,11 +17,30 @@ struct ReviewQueueView: View {
             header
             Divider().overlay(AtlasColor.borderSubtle)
 
-            HSplitView {
-                queue
-                    .frame(minWidth: 270, idealWidth: 320, maxWidth: 380)
-                reviewSurface
-                    .frame(minWidth: 540)
+            if let selectedSubmission {
+                GeometryReader { proxy in
+                    if proxy.size.width >= 840 {
+                        HSplitView {
+                            queue.frame(minWidth: 270, idealWidth: 320, maxWidth: 380)
+                            reviewSurface(selectedSubmission).frame(minWidth: 460)
+                        }
+                    } else {
+                        ScrollView {
+                            VStack(spacing: 0) {
+                                queue.frame(height: 300)
+                                Divider().overlay(AtlasColor.borderSubtle)
+                                reviewSurface(selectedSubmission).frame(minHeight: 620)
+                            }
+                        }
+                    }
+                }
+            } else {
+                ContentUnavailableView {
+                    Label("审核队列已清空", systemImage: "checkmark.seal")
+                } description: {
+                    Text("新的参企内容提交后会出现在这里。")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .background(AtlasCanvasBackground())
@@ -43,7 +66,7 @@ struct ReviewQueueView: View {
     private var queue: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(model.submissions) { submission in
+                ForEach(pendingSubmissions) { submission in
                     Button {
                         selectedSubmissionID = submission.id
                     } label: {
@@ -82,10 +105,8 @@ struct ReviewQueueView: View {
         .background(AtlasColor.canvas.opacity(0.54))
     }
 
-    private var reviewSurface: some View {
-        let submission = selectedSubmission
-
-        return VStack(spacing: 0) {
+    private func reviewSurface(_ submission: AtlasSubmission) -> some View {
+        VStack(spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(submission.title)
@@ -193,29 +214,31 @@ struct ReviewQueueView: View {
     private func actions(_ submission: AtlasSubmission) -> some View {
         HStack {
             Button {
-                model.review(submission.id, result: .revision)
+                process(submission, approved: false)
             } label: {
-                AtlasButtonLabel(title: "退回修改", systemImage: "arrow.uturn.backward")
+                AtlasButtonLabel(title: "拒绝", systemImage: "xmark")
             }
             .buttonStyle(.atlas(.ghost))
 
             Spacer()
 
             Button {
-                model.review(submission.id, result: .accepted)
-                model.showToast("已归入角色作品集")
+                process(submission, approved: true)
             } label: {
-                AtlasButtonLabel(title: "仅入作品集", systemImage: "person.crop.rectangle.stack")
-            }
-            .buttonStyle(.atlas(.glass))
-
-            Button {
-                model.review(submission.id, result: .accepted)
-            } label: {
-                AtlasButtonLabel(title: "采纳到 Wiki 候选", systemImage: "checkmark")
+                AtlasButtonLabel(title: "同意", systemImage: "checkmark")
             }
             .buttonStyle(.atlas(.primary))
         }
+    }
+
+    private func process(_ submission: AtlasSubmission, approved: Bool) {
+        let next = pendingSubmissions.first(where: { $0.id != submission.id })?.id
+        if approved {
+            model.approveSubmission(submission.id)
+        } else {
+            model.rejectSubmission(submission.id)
+        }
+        selectedSubmissionID = next ?? ""
     }
 
     private func impactLine(_ title: String, destination: String, canApply: Bool) -> some View {

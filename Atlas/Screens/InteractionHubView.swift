@@ -21,11 +21,21 @@ struct InteractionHubView: View {
             header
             Divider().overlay(AtlasColor.borderSubtle)
 
-            HSplitView {
-                taskBoard
-                    .frame(minWidth: 480)
-                taskDetail
-                    .frame(minWidth: 300, idealWidth: 360, maxWidth: 440)
+            GeometryReader { proxy in
+                if proxy.size.width >= 820 {
+                    HSplitView {
+                        taskBoard.frame(minWidth: 440)
+                        taskDetail.frame(minWidth: 300, idealWidth: 360, maxWidth: 440)
+                    }
+                } else {
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            taskBoard.frame(minHeight: 430)
+                            Divider().overlay(AtlasColor.borderSubtle)
+                            taskDetail.frame(minHeight: 480)
+                        }
+                    }
+                }
             }
         }
         .background(AtlasCanvasBackground())
@@ -56,7 +66,7 @@ struct InteractionHubView: View {
                     AtlasButtonLabel(title: "发布任务", systemImage: "plus")
                 }
                 .buttonStyle(.atlas(.primary))
-            } else {
+            } else if model.activeRole == .participant {
                 Button {
                     model.activeSheet = .submitWork
                 } label: {
@@ -129,8 +139,10 @@ struct InteractionHubView: View {
                     Button("复制任务链接") {
                         model.showToast("任务链接已复制")
                     }
-                    Button("在地图中定位") {
-                        model.destination = .canvas
+                    if model.activeRole == .owner {
+                        Button("在地图编辑器中定位") {
+                            model.navigate(to: .canvas)
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis")
@@ -163,7 +175,7 @@ struct InteractionHubView: View {
                     if let object {
                         model.selectedObjectID = object.id
                     }
-                    model.destination = .canvas
+                    model.navigate(to: .canvas)
                 } label: {
                     HStack {
                         Image(systemName: object?.type.symbol ?? "circle")
@@ -182,14 +194,34 @@ struct InteractionHubView: View {
 
             Spacer()
 
-            if model.accessMode == .manage {
+            if model.activeRole == .owner {
                 managementActions(task)
-            } else {
+            } else if model.activeRole == .participant {
                 participantActions(task)
+            } else {
+                visitorActions
             }
         }
         .padding(AtlasSpacing.xl)
         .background(AtlasColor.canvas.opacity(0.50))
+    }
+
+    private var visitorActions: some View {
+        VStack(spacing: AtlasSpacing.s) {
+            Label("游客可查看活动与参与情况", systemImage: "eye")
+                .font(AtlasFont.caption)
+                .foregroundStyle(AtlasColor.textSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, AtlasSpacing.s)
+
+            Button {
+                model.showToast("已打开参与角色")
+            } label: {
+                AtlasButtonLabel(title: "查看参与角色", systemImage: "person.2")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.atlas(.glass))
+        }
     }
 
     private func managementActions(_ task: AtlasTask) -> some View {
@@ -362,9 +394,16 @@ struct SubmitWorkSheet: View {
 
     @State private var stage = 0
     @State private var selectedTaskID = "task-night-watch"
+    @State private var selectedEvent = "第二幕 · 白塔封锁"
+    @State private var relatedCharacterIDs: Set<String> = ["char-cen"]
     @State private var workType = "文字"
+    @State private var workSubtype = "散文"
     @State private var title = "第七页日志背面坐标"
     @State private var content = "岑在被潮水浸没的航海日志背面发现了一段坐标。"
+    @State private var tags = "第二幕, 调查, 第七码头"
+    @State private var attachedFiles: [String] = []
+    @State private var crossModule = false
+    @State private var polished = false
     @State private var scaleScore = 2.0
     @State private var completionScore = 2.0
     @State private var bonusScore = 1.0
@@ -411,18 +450,28 @@ struct SubmitWorkSheet: View {
                     if stage == 0 {
                         withAnimation(.snappy) { stage = 1 }
                     } else {
-                        model.submissions.insert(
-                            .init(
-                                id: "SUB-\(40 + model.submissions.count + 1)",
-                                title: title,
-                                author: "岑",
-                                state: .pending,
-                                destination: "任务回应",
-                                affectedObjects: ["雾港", "夜航守望"]
-                            ),
-                            at: 0
+                        let submission = AtlasSubmission(
+                            id: "SUB-\(40 + model.submissions.count + model.characterApprovals.count + 1)",
+                            title: title,
+                            author: "岑",
+                            state: .pending,
+                            destination: "\(workType) · \(workSubtype) · \(selectedEvent)",
+                            affectedObjects: relatedCharacterIDs.compactMap { characterID in
+                                AtlasCharacterProfile.samples.first(where: { $0.id == characterID })?.name
+                            } + ["夜航守望"],
+                            wikiObjectID: nil,
+                            wikiChangeKind: relatedCharacterIDs.count > 1 ? .confirmedRelationship : .newEntry,
+                            authorCredits: relatedCharacterIDs.count > 1
+                                ? [
+                                    .init(name: "岑", avatarSeed: 1, timestamp: "刚刚提交", order: 0),
+                                    .init(name: "关联角色拥有者", avatarSeed: 2, timestamp: "等待确认", order: 1)
+                                ]
+                                : nil
                         )
-                        model.showToast("提交已进入审核队列，自评分 \(Int(totalScore))")
+                        model.submitWorkForReview(
+                            submission,
+                            requiresCharacterApproval: relatedCharacterIDs.contains(where: { $0 != "char-cen" })
+                        )
                         dismiss()
                     }
                 } label: {
@@ -436,66 +485,103 @@ struct SubmitWorkSheet: View {
             }
             .padding(AtlasSpacing.l)
         }
-        .frame(width: 680, height: 610)
+        .frame(width: 820, height: 680)
         .background(AtlasCanvasBackground())
     }
 
     private var submissionForm: some View {
-        HStack(alignment: .top, spacing: AtlasSpacing.xl) {
-            VStack(alignment: .leading, spacing: AtlasSpacing.l) {
-                Picker("使用角色", selection: .constant("岑 · 档案修复师")) {
-                    Text("岑 · 档案修复师").tag("岑 · 档案修复师")
-                }
-
-                Picker("关联任务", selection: $selectedTaskID) {
-                    ForEach(model.tasks) { task in
-                        Text(task.title).tag(task.id)
+        ScrollView {
+            HStack(alignment: .top, spacing: AtlasSpacing.xl) {
+                VStack(alignment: .leading, spacing: AtlasSpacing.l) {
+                    Text("关联角色").font(AtlasFont.caption).foregroundStyle(AtlasColor.textTertiary)
+                    ForEach(AtlasCharacterProfile.samples) { character in
+                        Toggle(isOn: Binding(
+                            get: { relatedCharacterIDs.contains(character.id) },
+                            set: { selected in
+                                if selected { relatedCharacterIDs.insert(character.id) }
+                                else if character.id != "char-cen" { relatedCharacterIDs.remove(character.id) }
+                            }
+                        )) {
+                            Label(character.name, systemImage: character.symbol)
+                        }
+                        .toggleStyle(.checkbox)
+                        .disabled(character.id == "char-cen")
                     }
-                }
 
-                Picker("作品类型", selection: $workType) {
-                    ForEach(["文字", "绘画", "影像", "3D", "手工", "音乐", "程序"], id: \.self) {
-                        Text($0).tag($0)
+                    Picker("关联任务", selection: $selectedTaskID) {
+                        ForEach(model.tasks) { task in
+                            Text(task.title).tag(task.id)
+                        }
                     }
-                }
 
-                Divider().overlay(AtlasColor.borderSubtle)
+                    Picker("关联活动", selection: $selectedEvent) {
+                        ForEach(["第二幕 · 白塔封锁", "夜航守望", "自由互动"], id: \.self) { Text($0) }
+                    }
 
-                Label("AI 边界已应用", systemImage: "checkmark.shield")
-                    .font(AtlasFont.caption)
-                    .foregroundStyle(AtlasColor.textSecondary)
-                Text("图片生成与画风模仿关闭；文本整理需明确标注。")
-                    .font(AtlasFont.caption)
-                    .foregroundStyle(AtlasColor.textTertiary)
-            }
-            .frame(width: 220)
+                    Picker("作品类型", selection: $workType) {
+                        ForEach(["文字", "绘画", "影像", "3D", "手工", "音乐", "程序"], id: \.self) {
+                            Text($0).tag($0)
+                        }
+                    }
+                    Picker("作品子类", selection: $workSubtype) {
+                        ForEach(subtypes, id: \.self) { Text($0) }
+                    }
 
-            VStack(alignment: .leading, spacing: AtlasSpacing.m) {
-                TextField("作品标题", text: $title)
-                    .textFieldStyle(.plain)
-                    .font(AtlasFont.heading)
-                    .padding(AtlasSpacing.m)
-                    .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: AtlasRadius.control))
-
-                TextEditor(text: $content)
-                    .font(AtlasFont.body)
-                    .scrollContentBackground(.hidden)
-                    .padding(AtlasSpacing.s)
-                    .frame(maxHeight: .infinity)
-                    .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: AtlasRadius.control))
-                    .overlay(RoundedRectangle(cornerRadius: AtlasRadius.control).stroke(AtlasColor.borderSubtle))
-
-                Button {
-                    model.showToast("已打开系统文件选择器")
-                } label: {
-                    Label("添加文件或外部链接", systemImage: "paperclip")
+                    Divider().overlay(AtlasColor.borderSubtle)
+                    Toggle("跨模块互动", isOn: $crossModule).toggleStyle(.checkbox)
+                    Toggle("超常精修投入", isOn: $polished).toggleStyle(.checkbox)
+                    Label("AI 边界已应用", systemImage: "checkmark.shield")
                         .font(AtlasFont.caption)
+                        .foregroundStyle(AtlasColor.textSecondary)
                 }
-                .buttonStyle(.plain)
+                .frame(width: 250)
+
+                VStack(alignment: .leading, spacing: AtlasSpacing.m) {
+                    TextField("作品标题", text: $title)
+                        .textFieldStyle(.plain)
+                        .font(AtlasFont.heading)
+                        .padding(AtlasSpacing.m)
+                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: AtlasRadius.control))
+
+                    TextEditor(text: $content)
+                        .font(AtlasFont.body)
+                        .scrollContentBackground(.hidden)
+                        .padding(AtlasSpacing.s)
+                        .frame(height: 210)
+                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: AtlasRadius.control))
+                        .overlay(RoundedRectangle(cornerRadius: AtlasRadius.control).stroke(AtlasColor.borderSubtle))
+
+                    TextField("标签，以逗号分隔", text: $tags)
+                        .textFieldStyle(.plain)
+                        .padding(AtlasSpacing.s)
+                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: AtlasRadius.control))
+
+                    Button {
+                        attachedFiles.append("atlas-work-\(attachedFiles.count + 1).\(workType == "文字" ? "md" : "png")")
+                    } label: {
+                        Label("添加文件或外部链接", systemImage: "paperclip")
+                            .font(AtlasFont.caption)
+                    }
+                    .buttonStyle(.plain)
+
+                    ForEach(attachedFiles, id: \.self) { file in
+                        Label(file, systemImage: "doc")
+                            .font(AtlasFont.monoSmall)
+                            .foregroundStyle(AtlasColor.textSecondary)
+                    }
+                }
             }
+            .padding(AtlasSpacing.xl)
         }
-        .padding(AtlasSpacing.xl)
-        .frame(maxHeight: .infinity)
+    }
+
+    private var subtypes: [String] {
+        switch workType {
+        case "文字": return ["散文", "诗歌", "剧本"]
+        case "影像": return ["通用影像", "Machinima", "游戏实况"]
+        case "绘画": return ["插画", "漫画", "动图"]
+        default: return ["通用", "合作作品", "实验作品"]
+        }
     }
 
     private var selfRating: some View {
@@ -535,7 +621,7 @@ struct SubmitWorkSheet: View {
     }
 
     private var totalScore: Double {
-        scaleScore + completionScore + bonusScore
+        scaleScore + completionScore + bonusScore + (crossModule ? 2 : 0) + (polished ? 2 : 0)
     }
 
     private func scoreSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {

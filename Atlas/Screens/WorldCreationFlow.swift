@@ -19,6 +19,7 @@ struct WorldCreationFlow: View {
     @ObservedObject var model: AtlasAppModel
     @Environment(\.dismiss) private var dismiss
     var onClose: (() -> Void)? = nil
+    var onComplete: (() -> Void)? = nil
 
     private enum Act: Int, CaseIterable {
         case name, image, echo, ignite
@@ -58,7 +59,6 @@ struct WorldCreationFlow: View {
                 footer
             }
         }
-        .frame(minWidth: 860, idealWidth: 960, minHeight: 640, idealHeight: 720)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(red: 0.035, green: 0.035, blue: 0.043))
         .onAppear { syncGlow(animated: false) }
@@ -394,10 +394,14 @@ struct WorldCreationFlow: View {
     }
 
     private func enterWorld() {
-        model.creationCompleted = true
-        model.accessMode = .manage
-        model.destination = .canvas
-        close()
+        if let onComplete {
+            onComplete()
+        } else {
+            model.creationCompleted = true
+            model.accessMode = .manage
+            model.destination = .canvas
+            close()
+        }
     }
 
     private func close() {

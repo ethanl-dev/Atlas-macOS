@@ -5,18 +5,10 @@ struct PublicProjectView: View {
     @State private var tab = PublicTab.detail
 
     var body: some View {
-        ZStack(alignment: .top) {
-            ScrollView {
-                VStack(spacing: 0) {
-                    hero
-                    tabBar
-                    content
-                }
-            }
-
-            if model.accessMode == .publicPreview {
-                previewBar
-                    .padding(AtlasSpacing.l)
+        ScrollView {
+            VStack(spacing: 0) {
+                hero
+                pageLayout
             }
         }
         .background(AtlasCanvasBackground())
@@ -25,89 +17,173 @@ struct PublicProjectView: View {
     private var hero: some View {
         ZStack(alignment: .bottomLeading) {
             PublicWorldArtwork()
-                .frame(height: 390)
+                .frame(height: 500)
 
             LinearGradient(
-                colors: [.clear, AtlasColor.canvas.opacity(0.90)],
+                colors: [.clear, AtlasColor.canvas.opacity(0.42)],
                 startPoint: .center,
                 endPoint: .bottom
             )
 
-            VStack(alignment: .leading, spacing: AtlasSpacing.m) {
-                HStack(spacing: AtlasSpacing.s) {
-                    Label("持续招募中", systemImage: "circle.fill")
-                    Text("第二幕 · 潮汐历 742 年")
+            heroDock
+                .padding(.horizontal, 32)
+                .padding(.bottom, 22)
+        }
+        .frame(minHeight: 500)
+    }
+
+    private var heroDock: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .bottom, spacing: 8) {
+                heroIdentity
+                    .frame(width: 300, height: 138, alignment: .bottomLeading)
+                heroMetrics
+                    .frame(minWidth: 360, maxWidth: .infinity, minHeight: 76, maxHeight: 76)
+                heroActions
+                    .frame(width: 390, height: 82)
+            }
+
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    heroIdentity.frame(maxWidth: .infinity, minHeight: 116)
+                    heroActions.frame(width: 330, height: 82)
                 }
-                .font(AtlasFont.monoSmall)
+                heroMetrics.frame(height: 70)
+            }
+        }
+    }
+
+    private var heroIdentity: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: AtlasSpacing.s) {
+                Label(model.activeWorld.status, systemImage: "circle.fill")
+                Text("第二幕 · 潮汐历 742 年")
+            }
+            .font(AtlasFont.monoSmall)
+            .foregroundStyle(AtlasColor.textSecondary)
+
+            Text(model.activeWorld.name)
+                .font(.system(size: 34, weight: .semibold))
+
+            Text(model.activeWorld.hook)
+                .font(.system(size: 15))
                 .foregroundStyle(AtlasColor.textSecondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+    }
 
-                Text(model.activeWorld.name)
-                    .font(.system(size: 44, weight: .semibold))
+    private var heroMetrics: some View {
+        HStack(spacing: 0) {
+            heroMetric("活跃角色", value: "24")
+            heroMetric("开放任务", value: "07")
+            heroMetric("Wiki 变更", value: "36", showsDivider: false)
+        }
+    }
 
-                Text(model.activeWorld.hook)
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(AtlasColor.textSecondary)
-
-                HStack(spacing: AtlasSpacing.s) {
-                    if model.accessMode == .publicPreview {
-                        Button {
-                            model.activeSheet = .publish
-                        } label: {
-                            AtlasButtonLabel(title: "发布招募页", systemImage: "paperplane")
+    private var heroActions: some View {
+        AtlasGlassGroup(spacing: 10) {
+            HStack(spacing: 10) {
+                Button {
+                    model.navigate(to: .canvas)
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("进入企划")
+                                .font(.system(size: 17, weight: .semibold))
+                            Text("打开 World Canvas")
+                                .font(AtlasFont.monoSmall)
+                                .foregroundStyle(AtlasColor.textSecondary)
                         }
-                        .buttonStyle(.atlas(.primary))
-                    } else {
-                        Button {
-                            model.activeSheet = .application
-                        } label: {
-                            AtlasButtonLabel(title: "申请加入", systemImage: "person.badge.plus")
-                        }
-                        .buttonStyle(.atlas(.primary))
+                        Spacer()
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 17, weight: .semibold))
+                    }
+                    .foregroundStyle(AtlasColor.textPrimary)
+                    .padding(.horizontal, AtlasSpacing.l)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .atlasP1Glass(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous),
+                        interactive: true
+                    )
+                }
+                .buttonStyle(.plain)
 
-                        Button {
-                            model.accessMode = .participate
-                            model.destination = .overview
-                        } label: {
-                            AtlasButtonLabel(title: "进入企划", systemImage: "arrow.right")
-                        }
-                        .buttonStyle(.atlas(.glass))
+                if model.activeRole == .owner && model.canWriteActiveWorld {
+                    auxiliaryHeroButton(symbol: "pencil", help: "编辑企划首页") {
+                        model.activeSheet = .publicPageEditor
+                    }
+                } else if model.activeRole == .visitor && model.canWriteActiveWorld {
+                    auxiliaryHeroButton(symbol: "person.badge.plus", help: "申请加入企划") {
+                        model.activeSheet = .application
                     }
                 }
             }
-            .padding(AtlasSpacing.xxl)
         }
-        .frame(minHeight: 390)
+        .padding(8)
+    }
+
+    private func auxiliaryHeroButton(
+        symbol: String,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(AtlasColor.textPrimary)
+                .frame(width: 58, height: 58)
+                .atlasP1Glass(Circle(), interactive: true)
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 
     private var tabBar: some View {
-        HStack(spacing: AtlasSpacing.xxl) {
+        HStack(spacing: 0) {
             ForEach(PublicTab.allCases) { item in
                 Button {
                     withAnimation(.snappy) { tab = item }
                 } label: {
                     VStack(spacing: AtlasSpacing.s) {
-                        Label(item.rawValue, systemImage: item.symbol)
+                        Text(item.rawValue)
                             .font(AtlasFont.label)
                         Rectangle()
-                            .fill(tab == item ? Color.white : Color.clear)
+                            .fill(tab == item ? Color.white : Color.white.opacity(0.12))
                             .frame(height: 2)
                     }
+                    .frame(width: 112)
                     .foregroundStyle(tab == item ? AtlasColor.textPrimary : AtlasColor.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
-            Spacer()
-            Text("\(model.activeWorld.members) 位成员")
-                .font(AtlasFont.monoSmall)
-                .foregroundStyle(AtlasColor.textTertiary)
         }
-        .padding(.horizontal, AtlasSpacing.xxl)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, AtlasSpacing.xxl)
         .padding(.top, AtlasSpacing.l)
         .background(AtlasColor.canvas)
     }
 
+    private var pageLayout: some View {
+        HStack(alignment: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                tabBar
+                selectedPage
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+
+            Divider().overlay(AtlasColor.borderSubtle)
+
+            persistentInfoRail
+                .frame(width: 320)
+        }
+    }
+
     @ViewBuilder
-    private var content: some View {
+    private var selectedPage: some View {
         switch tab {
         case .detail: publicDetail
         case .characters: characterGallery
@@ -116,50 +192,55 @@ struct PublicProjectView: View {
     }
 
     private var publicDetail: some View {
-        HStack(alignment: .top, spacing: AtlasSpacing.xxxl) {
-            VStack(alignment: .leading, spacing: AtlasSpacing.xl) {
-                Text("来自未来的信，正在退潮后的白沙滩上等待收件人。")
-                    .font(.system(size: 26, weight: .medium))
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: AtlasSpacing.xl) {
+            Text("来自未来的信，正在退潮后的白沙滩上等待收件人。")
+                .font(.system(size: 26, weight: .medium))
+                .fixedSize(horizontal: false, vertical: true)
 
-                Text("雾潮纪元第四十二年，北方海域的旧航线再度开放。沿海居民发现，海雾中偶尔会出现无法被星图记录的岛屿，而从岛上寄出的信件，落款日期都在三十年以后。")
-                    .font(.system(size: 16))
-                    .foregroundStyle(AtlasColor.textSecondary)
-                    .lineSpacing(7)
+            Text("雾潮纪元第四十二年，北方海域的旧航线再度开放。沿海居民发现，海雾中偶尔会出现无法被星图记录的岛屿，而从岛上寄出的信件，落款日期都在三十年以后。")
+                .font(.system(size: 16))
+                .foregroundStyle(AtlasColor.textSecondary)
+                .lineSpacing(7)
 
-                Divider().overlay(AtlasColor.borderSubtle)
+            Divider().overlay(AtlasColor.borderSubtle)
 
-                HStack(spacing: AtlasSpacing.xxl) {
-                    publicMetric("当前章节", value: "第二幕")
-                    publicMetric("企划周期", value: "长期")
-                    publicMetric("参与方式", value: "审核制")
-                }
-
-                Text("世界节选")
-                    .font(AtlasFont.heading)
-
-                MiniWorldStrip(model: model)
+            HStack(spacing: AtlasSpacing.xxl) {
+                publicMetric("当前章节", value: "第二幕")
+                publicMetric("企划周期", value: "长期")
+                publicMetric("参与方式", value: "审核制")
             }
-            .frame(maxWidth: 720, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: AtlasSpacing.l) {
-                Label("AI 使用边界", systemImage: "checkmark.shield")
-                    .font(AtlasFont.heading)
+            Text("世界节选")
+                .font(AtlasFont.heading)
+
+            MiniWorldStrip(model: model)
+        }
+        .padding(AtlasSpacing.xxl)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var persistentInfoRail: some View {
+        VStack(spacing: AtlasSpacing.m) {
+            infoCard("AI 使用边界", symbol: "checkmark.shield", tint: AtlasColor.auroraMint) {
                 policyRow("允许", detail: "灵感发散、资料整理、文本校对")
                 policyRow("需标注", detail: "包含 AI 辅助的公开文本")
                 policyRow("关闭", detail: "图片生成、改图、画风模仿")
-                Divider().overlay(AtlasColor.borderSubtle)
-                Text("申请前，参与者需要确认完整的 AI 与授权声明。")
-                    .font(AtlasFont.caption)
-                    .foregroundStyle(AtlasColor.textTertiary)
             }
-            .padding(AtlasSpacing.l)
-            .frame(width: 300)
-            .atlasGlass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
+
+            infoCard("运营脉冲", symbol: "waveform.path.ecg", tint: AtlasColor.auroraAmber) {
+                pulseRow("正在推进", detail: "潮汐回响 · 第二阶段")
+                pulseRow("活动状态", detail: model.isActiveWorldArchived ? "已封存" : "持续进行")
+                pulseRow("本周互动", detail: "42 次角色回应")
+            }
+
+            infoCard("最近变化", symbol: "clock.arrow.circlepath", tint: AtlasColor.auroraViolet) {
+                changeRow("白塔封锁进入事件结算", time: "18 分钟前")
+                changeRow("新增关系：第七码头临时同盟", time: "1 小时前")
+                changeRow("AI 使用边界已确认", time: "今天 08:12")
+            }
         }
-        .padding(AtlasSpacing.xxl)
-        .frame(maxWidth: 1120, alignment: .leading)
-        .frame(maxWidth: .infinity)
+        .padding(AtlasSpacing.l)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private var characterGallery: some View {
@@ -201,47 +282,101 @@ struct PublicProjectView: View {
         VStack(alignment: .leading, spacing: AtlasSpacing.xl) {
             Text("世界留下的作品")
                 .font(AtlasFont.title)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: AtlasSpacing.l)], spacing: AtlasSpacing.l) {
-                ForEach(AtlasAssetPreview.samples) { work in
-                    Button {
-                        model.showToast("已打开作品「\(work.title)」")
-                    } label: {
-                        VStack(alignment: .leading, spacing: AtlasSpacing.s) {
-                            AssetArtworkPreview(seed: work.seed, symbol: work.symbol)
-                                .frame(height: work.featured ? 240 : 170)
-                            Text(work.title)
-                                .font(AtlasFont.heading)
-                            Text("\(work.author) · \(work.type)")
-                                .font(AtlasFont.caption)
-                                .foregroundStyle(AtlasColor.textTertiary)
+
+            HStack(alignment: .top, spacing: AtlasSpacing.l) {
+                ForEach(0..<2, id: \.self) { column in
+                    LazyVStack(alignment: .leading, spacing: AtlasSpacing.l) {
+                        ForEach(
+                            Array(AtlasAssetPreview.samples.enumerated())
+                                .filter { $0.offset % 2 == column },
+                            id: \.element.id
+                        ) { _, work in
+                            workCard(work)
                         }
                     }
-                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
             }
         }
         .padding(AtlasSpacing.xxl)
     }
 
-    private var previewBar: some View {
-        HStack {
-            Label("公开页预览", systemImage: "eye")
-                .font(AtlasFont.label)
-            Text("访客将看到这个版本")
-                .font(AtlasFont.caption)
-                .foregroundStyle(AtlasColor.textTertiary)
-            Spacer()
-            Button {
-                model.switchMode(.manage)
-            } label: {
-                AtlasButtonLabel(title: "返回管理", systemImage: "arrow.uturn.backward")
+    private func workCard(_ work: AtlasAssetPreview) -> some View {
+        Button {
+            model.showToast("已打开作品「\(work.title)」")
+        } label: {
+            VStack(alignment: .leading, spacing: AtlasSpacing.s) {
+                AssetArtworkPreview(seed: work.seed, symbol: work.symbol)
+                    .frame(height: work.featured ? 260 : 166)
+                Text(work.title)
+                    .font(AtlasFont.heading)
+                Text("\(work.author) · \(work.type)")
+                    .font(AtlasFont.caption)
+                    .foregroundStyle(AtlasColor.textTertiary)
             }
-            .buttonStyle(.atlas(.glass))
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, AtlasSpacing.m)
-        .padding(.vertical, AtlasSpacing.s)
-        .atlasGlass(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(AtlasColor.borderSubtle))
+        .buttonStyle(.plain)
+    }
+
+    private func heroMetric(
+        _ title: String,
+        value: String,
+        showsDivider: Bool = true
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(value)
+                .font(.system(size: 24, weight: .semibold, design: .monospaced))
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AtlasColor.textTertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 28)
+        .overlay(alignment: .trailing) {
+            if showsDivider {
+                Rectangle()
+                    .fill(Color.white.opacity(0.19))
+                    .frame(width: 1)
+                    .padding(.vertical, 14)
+            }
+        }
+    }
+
+    private func infoCard<Content: View>(
+        _ title: String,
+        symbol: String,
+        tint: Color,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: AtlasSpacing.m) {
+            Label(title, systemImage: symbol)
+                .font(AtlasFont.heading)
+                .foregroundStyle(tint)
+            Divider().overlay(AtlasColor.borderSubtle)
+            content()
+        }
+        .padding(AtlasSpacing.l)
+        .frame(maxWidth: .infinity, minHeight: 160, alignment: .topLeading)
+        .atlasChromaticGlass(
+            RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous),
+            tint: tint
+        )
+    }
+
+    private func pulseRow(_ label: String, detail: String) -> some View {
+        HStack {
+            Text(label).font(AtlasFont.caption).foregroundStyle(AtlasColor.textTertiary)
+            Spacer()
+            Text(detail).font(AtlasFont.label)
+        }
+    }
+
+    private func changeRow(_ title: String, time: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(AtlasFont.caption)
+            Text(time).font(AtlasFont.monoSmall).foregroundStyle(AtlasColor.textTertiary)
+        }
     }
 
     private func publicMetric(_ label: String, value: String) -> some View {
@@ -330,7 +465,7 @@ private struct MiniWorldStrip: View {
             ForEach(WorldObject.samples.prefix(4)) { object in
                 Button {
                     model.selectedObjectID = object.id
-                    model.destination = .canvas
+                    model.navigate(to: .canvas)
                 } label: {
                     VStack(alignment: .leading, spacing: AtlasSpacing.s) {
                         Image(systemName: object.type.symbol)

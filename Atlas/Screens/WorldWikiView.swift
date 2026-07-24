@@ -8,7 +8,7 @@ struct WorldWikiView: View {
     @State private var showsInspector = false
 
     private var filteredObjects: [WorldObject] {
-        WorldObject.samples.filter { object in
+        model.allWikiObjects.filter { object in
             (selectedType == nil || object.type == selectedType) &&
             (query.isEmpty || object.name.localizedCaseInsensitiveContains(query))
         }
@@ -97,7 +97,7 @@ struct WorldWikiView: View {
                     .buttonStyle(.plain)
                     .help("关闭目录")
                 }
-                if model.accessMode == .manage {
+                if model.accessMode == .manage && model.canWriteActiveWorld {
                     Button {
                         model.activeSheet = .objectEditor
                     } label: {
@@ -199,18 +199,28 @@ struct WorldWikiView: View {
                         .font(AtlasFont.monoSmall)
                         .foregroundStyle(AtlasColor.textTertiary)
                     Spacer()
-                    if model.accessMode == .manage {
+                    if model.accessMode == .manage && model.canWriteActiveWorld {
                         Button {
                             model.activeSheet = .objectEditor
                         } label: {
                             AtlasButtonLabel(title: "编辑", systemImage: "pencil")
                         }
                         .buttonStyle(.atlas(.glass))
-                    } else {
+                    } else if model.activeRole == .participant && model.canWriteActiveWorld {
                         Button {
                             model.showToast("修改建议已建立为草稿")
                         } label: {
                             AtlasButtonLabel(title: "提出修改", systemImage: "bubble.left")
+                        }
+                        .buttonStyle(.atlas(.glass))
+                    }
+
+                    if object.type == .character {
+                        Button {
+                            model.selectedCharacterID = "char-cen"
+                            model.activeSheet = .characterCard
+                        } label: {
+                            AtlasButtonLabel(title: "角色卡", systemImage: "person.text.rectangle")
                         }
                         .buttonStyle(.atlas(.glass))
                     }
@@ -252,12 +262,28 @@ struct WorldWikiView: View {
                         .foregroundStyle(AtlasColor.textSecondary)
                         .lineSpacing(6)
                         .textSelection(.enabled)
+
+                    ForEach(model.wikiContributions(for: object.id)) { submission in
+                        VStack(alignment: .leading, spacing: AtlasSpacing.xs) {
+                            Text(submission.title)
+                                .font(AtlasFont.label)
+                            Text(submission.destination)
+                                .font(AtlasFont.monoSmall)
+                                .foregroundStyle(AtlasColor.textTertiary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(AtlasSpacing.m)
+                        .atlasChromaticGlass(
+                            RoundedRectangle(cornerRadius: AtlasRadius.control),
+                            tint: AtlasColor.auroraMint
+                        )
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: AtlasSpacing.m) {
                     Text("关联对象")
                         .font(AtlasFont.heading)
-                    ForEach(WorldObject.samples.filter { $0.id != object.id }.prefix(3)) { linked in
+                    ForEach(model.allWikiObjects.filter { $0.id != object.id }.prefix(3)) { linked in
                         Button {
                             model.selectedObjectID = linked.id
                         } label: {
@@ -280,6 +306,29 @@ struct WorldWikiView: View {
                         .overlay(alignment: .bottom) {
                             Divider().overlay(AtlasColor.borderSubtle)
                         }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: AtlasSpacing.m) {
+                    Text("编写人")
+                        .font(AtlasFont.heading)
+
+                    ForEach(model.wikiAuthorCredits(for: object.id)) { credit in
+                        HStack(spacing: AtlasSpacing.m) {
+                            WikiAuthorAvatar(name: credit.name, seed: credit.avatarSeed)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(credit.name)
+                                    .font(AtlasFont.label)
+                                Text(creditRole(credit, objectID: object.id))
+                                    .font(AtlasFont.caption)
+                                    .foregroundStyle(AtlasColor.textTertiary)
+                                Text(credit.timestamp)
+                                    .font(AtlasFont.monoSmall)
+                                    .foregroundStyle(AtlasColor.textTertiary)
+                            }
+                            Spacer()
+                        }
+                        .padding(.vertical, AtlasSpacing.xs)
                     }
                 }
             }
@@ -324,13 +373,15 @@ struct WorldWikiView: View {
 
             Spacer()
 
-            Button {
-                model.destination = .canvas
-            } label: {
-                AtlasButtonLabel(title: "在地图中定位", systemImage: "scope")
-                    .frame(maxWidth: .infinity)
+            if model.activeRole == .owner && model.canWriteActiveWorld {
+                Button {
+                    model.navigate(to: .canvas)
+                } label: {
+                    AtlasButtonLabel(title: "在地图编辑器中定位", systemImage: "scope")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.atlas(.glass))
             }
-            .buttonStyle(.atlas(.glass))
         }
         .padding(AtlasSpacing.l)
         .background(AtlasColor.canvas.opacity(0.96))
@@ -393,8 +444,64 @@ struct WorldWikiView: View {
             return "世界事件会改变地点、角色、组织和规则的状态。结算前所有影响均处于候选状态，不能直接改写正式世界线。"
         case .rule:
             return "文本 Agent 仅可用于整理、检查、检索和草稿辅助。图片生成、图生图、改图、画风模仿与使用参与者作品训练均默认关闭。"
+        case .relationship:
+            return "这是一条经关系双方分别确认后新增的关系档案。它独立于角色本体设定，并按确认顺序保留双方署名与时间。"
         default:
             return "该对象已进入世界档案，可被地图、事件、作品与角色经历引用。任何正式修改都会保留版本记录和变更来源。"
+        }
+    }
+
+    private func creditRole(
+        _ credit: AtlasSubmission.AuthorCredit,
+        objectID: String
+    ) -> String {
+        if credit.timestamp == "原始档案" {
+            return "企主 · 原始档案编写"
+        }
+        let contributions = model.wikiContributions(for: objectID)
+        if contributions.contains(where: {
+            $0.wikiChangeKind == .confirmedRelationship &&
+            $0.authorCredits.contains(where: { $0.name == credit.name })
+        }) {
+            return "关系参与者 · 独立确认"
+        }
+        if contributions.contains(where: {
+            $0.wikiChangeKind == .revision &&
+            $0.authorCredits.contains(where: { $0.name == credit.name })
+        }) {
+            return "参企者 · 修改既有条目"
+        }
+        return "参企者 · 新增条目"
+    }
+}
+
+private struct WikiAuthorAvatar: View {
+    let name: String
+    let seed: Int
+
+    var body: some View {
+        Circle()
+            .fill(
+                LinearGradient(
+                    colors: avatarColors,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: 38, height: 38)
+            .overlay {
+                Text(String(name.prefix(1)))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .overlay(Circle().stroke(Color.white.opacity(0.32), lineWidth: 1))
+    }
+
+    private var avatarColors: [Color] {
+        switch abs(seed % 3) {
+        case 0: [AtlasColor.auroraMint, AtlasColor.auroraViolet]
+        case 1: [AtlasColor.auroraRose, AtlasColor.auroraViolet]
+        default: [AtlasColor.auroraAmber, AtlasColor.auroraRose]
         }
     }
 }

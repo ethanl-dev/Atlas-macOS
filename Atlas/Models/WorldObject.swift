@@ -17,6 +17,7 @@ enum WorldObjectType: String, CaseIterable, Identifiable {
     case rule         = "规则"
     case artifact     = "物件"
     case work         = "作品"
+    case relationship = "关系"
 
     var id: String { rawValue }
 
@@ -31,6 +32,7 @@ enum WorldObjectType: String, CaseIterable, Identifiable {
         case .rule:         return "scroll"
         case .artifact:     return "shippingbox"
         case .work:         return "paintbrush.pointed"
+        case .relationship: return "person.line.dotted.person"
         }
     }
 }

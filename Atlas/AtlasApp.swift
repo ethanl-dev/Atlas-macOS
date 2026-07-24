@@ -14,7 +14,7 @@ struct AtlasApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
-                .frame(minWidth: 960, minHeight: 640)
+                .frame(minWidth: 700, minHeight: 520)
                 .preferredColorScheme(.dark)
                 .tint(.white)
         }

@@ -276,6 +276,90 @@ struct PublishCheckSheet: View {
     }
 }
 
+struct PublicPageEditorSheet: View {
+    @ObservedObject var model: AtlasAppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var hook: String
+    @State private var introduction =
+        "雾潮纪元第四十二年，北方海域的旧航线再度开放。来自未来的信，正在退潮后的白沙滩上等待收件人。"
+    @State private var participation = "审核制"
+    @State private var recruitmentOpen = true
+
+    init(model: AtlasAppModel) {
+        self.model = model
+        _hook = State(initialValue: model.activeWorld.hook)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            sheetHeader("编辑公开页", subtitle: "OWNER ONLY", dismiss: dismiss)
+            Divider().overlay(AtlasColor.borderSubtle)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: AtlasSpacing.l) {
+                    editorField("一句话钩子") {
+                        TextField("用一句话邀请大家进入这个世界", text: $hook)
+                    }
+                    editorField("公开简介") {
+                        TextEditor(text: $introduction)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 150)
+                    }
+                    editorField("参与方式") {
+                        Picker("参与方式", selection: $participation) {
+                            Text("审核制").tag("审核制")
+                            Text("邀请制").tag("邀请制")
+                            Text("自由参与").tag("自由参与")
+                        }
+                        .labelsHidden()
+                    }
+                    Toggle("开放报名", isOn: $recruitmentOpen)
+                        .font(AtlasFont.body)
+                }
+                .padding(AtlasSpacing.xxl)
+            }
+
+            Divider().overlay(AtlasColor.borderSubtle)
+            HStack {
+                Text("保存后仍需通过发布检查，才会更新访客看到的版本。")
+                    .font(AtlasFont.caption)
+                    .foregroundStyle(AtlasColor.textTertiary)
+                Spacer()
+                Button("取消") { dismiss() }
+                    .buttonStyle(.atlas(.ghost))
+                Button {
+                    model.showToast("公开页草稿已保存")
+                    dismiss()
+                } label: {
+                    AtlasButtonLabel(title: "保存草稿", systemImage: "checkmark")
+                }
+                .buttonStyle(.atlas(.primary))
+                .disabled(hook.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(AtlasSpacing.l)
+        }
+        .frame(width: 680, height: 620)
+        .background(AtlasCanvasBackground())
+    }
+
+    private func editorField<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: AtlasSpacing.xs) {
+            Text(title)
+                .font(AtlasFont.caption)
+                .foregroundStyle(AtlasColor.textTertiary)
+            content()
+                .textFieldStyle(.plain)
+                .font(AtlasFont.body)
+                .padding(AtlasSpacing.m)
+                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: AtlasRadius.control))
+                .overlay(RoundedRectangle(cornerRadius: AtlasRadius.control).stroke(AtlasColor.borderSubtle))
+        }
+    }
+}
+
 struct ObjectEditorSheet: View {
     @ObservedObject var model: AtlasAppModel
     @Environment(\.dismiss) private var dismiss

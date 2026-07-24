@@ -84,6 +84,31 @@ extension View {
             }
             .shadow(color: .black.opacity(0.38), radius: 15, y: 8)
     }
+
+    /// 带语义色的流动玻璃。色彩只做局部光源，文字仍保持高对比。
+    func atlasChromaticGlass<S: Shape>(
+        _ shape: S = RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous),
+        tint: Color,
+        interactive: Bool = false
+    ) -> some View {
+        background(
+            LinearGradient(
+                colors: [tint.opacity(0.22), tint.opacity(0.05), Color.black.opacity(0.16)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: shape
+        )
+        .atlasGlass(shape, clear: true, interactive: interactive)
+        .overlay(shape.stroke(tint.opacity(0.30), lineWidth: 1))
+        .overlay(alignment: .top) {
+            shape.stroke(tint.opacity(0.48), lineWidth: 0.7)
+                .mask(
+                    LinearGradient(colors: [.white, .clear], startPoint: .topLeading, endPoint: .center)
+                )
+        }
+        .shadow(color: tint.opacity(0.13), radius: 22, y: 8)
+    }
 }
 
 // MARK: - 玻璃容器

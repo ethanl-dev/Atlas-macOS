@@ -1,8 +1,15 @@
 import SwiftUI
 
 struct InboxView: View {
+    private enum InboxMode: String, CaseIterable {
+        case messages = "消息"
+        case confirmations = "待我确认"
+    }
+
     @ObservedObject var model: AtlasAppModel
     @State private var selectedID = "inbox-1"
+    @State private var compactShowsDetail = false
+    @State private var mode: InboxMode = .messages
 
     private let messages = AtlasInboxItem.samples
 
@@ -17,6 +24,16 @@ struct InboxView: View {
                         .foregroundStyle(AtlasColor.textSecondary)
                 }
                 Spacer()
+                Picker("收件箱分区", selection: $mode) {
+                    ForEach(InboxMode.allCases, id: \.rawValue) { item in
+                        Text(item == .confirmations && !model.characterApprovals.isEmpty
+                             ? "\(item.rawValue) \(model.characterApprovals.count)"
+                             : item.rawValue)
+                            .tag(item)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 220)
                 Button {
                     model.showToast("全部消息已标记为已读")
                 } label: {
@@ -29,28 +46,104 @@ struct InboxView: View {
 
             Divider().overlay(AtlasColor.borderSubtle)
 
-            HSplitView {
-                messageList
-                    .frame(minWidth: 300, idealWidth: 360, maxWidth: 430)
-                messageDetail
-                    .frame(minWidth: 440)
+            if mode == .confirmations {
+                characterConfirmations
+            } else {
+                GeometryReader { proxy in
+                    if proxy.size.width >= 760 {
+                        HSplitView {
+                            messageList(compact: false)
+                                .frame(minWidth: 270, idealWidth: 340, maxWidth: 410)
+                            messageDetail(compact: false)
+                                .frame(minWidth: 360)
+                        }
+                    } else if compactShowsDetail {
+                        messageDetail(compact: true)
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                    } else {
+                        messageList(compact: true)
+                            .transition(.move(edge: .leading).combined(with: .opacity))
+                    }
+                }
             }
         }
         .background(AtlasCanvasBackground())
     }
 
-    private var messageList: some View {
+    private var characterConfirmations: some View {
+        Group {
+            if model.characterApprovals.isEmpty {
+                ContentUnavailableView {
+                    Label("没有待确认的角色互动", systemImage: "person.crop.circle.badge.checkmark")
+                } description: {
+                    Text("涉及你的角色关系、关键立场或不可逆经历时，会出现在这里。")
+                }
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: AtlasSpacing.m) {
+                        ForEach(model.characterApprovals) { approval in
+                            VStack(alignment: .leading, spacing: AtlasSpacing.l) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(approval.summary).font(AtlasFont.heading)
+                                        Text("\(approval.requester) 希望使用角色「\(approval.characterName)」")
+                                            .font(AtlasFont.monoSmall)
+                                            .foregroundStyle(AtlasColor.textTertiary)
+                                    }
+                                    Spacer()
+                                    Label("角色拥有者确认", systemImage: "person.crop.circle")
+                                        .font(AtlasFont.caption)
+                                        .foregroundStyle(AtlasColor.auroraViolet)
+                                }
+
+                                Text(approval.permissionConcern)
+                                    .font(AtlasFont.body)
+                                    .foregroundStyle(AtlasColor.textSecondary)
+
+                                HStack {
+                                    Button {
+                                        model.rejectCharacterInteraction(approval.id)
+                                    } label: {
+                                        AtlasButtonLabel(title: "拒绝", systemImage: "xmark")
+                                    }
+                                    .buttonStyle(.atlas(.ghost))
+                                    Spacer()
+                                    Button {
+                                        model.approveCharacterInteraction(approval.id)
+                                    } label: {
+                                        AtlasButtonLabel(title: "同意并交企主审核", systemImage: "checkmark")
+                                    }
+                                    .buttonStyle(.atlas(.primary))
+                                }
+                            }
+                            .padding(AtlasSpacing.xl)
+                            .atlasChromaticGlass(RoundedRectangle(cornerRadius: AtlasRadius.card), tint: AtlasColor.auroraViolet)
+                        }
+                    }
+                    .padding(AtlasSpacing.xl)
+                    .frame(maxWidth: 860)
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+    }
+
+    private func messageList(compact: Bool) -> some View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(messages) { item in
                     Button {
                         selectedID = item.id
+                        if compact {
+                            withAnimation(.snappy(duration: 0.24)) { compactShowsDetail = true }
+                        }
                     } label: {
                         HStack(alignment: .top, spacing: AtlasSpacing.m) {
                             Image(systemName: item.symbol)
                                 .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(tint(for: item.kind))
                                 .frame(width: 30, height: 30)
-                                .background(Color.white.opacity(item.unread ? 0.10 : 0.04), in: Circle())
+                                .background(tint(for: item.kind).opacity(item.unread ? 0.18 : 0.07), in: Circle())
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
                                     Text(item.title)
@@ -68,7 +161,15 @@ struct InboxView: View {
                         }
                         .foregroundStyle(AtlasColor.textPrimary)
                         .padding(AtlasSpacing.l)
-                        .background(selectedID == item.id ? Color.white.opacity(0.065) : Color.clear)
+                        .background {
+                            if selectedID == item.id {
+                                LinearGradient(
+                                    colors: [tint(for: item.kind).opacity(0.16), Color.clear],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            }
+                        }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -79,15 +180,25 @@ struct InboxView: View {
         .background(AtlasColor.canvas.opacity(0.50))
     }
 
-    private var messageDetail: some View {
+    private func messageDetail(compact: Bool) -> some View {
         let item = messages.first(where: { $0.id == selectedID }) ?? messages[0]
 
         return VStack(alignment: .leading, spacing: AtlasSpacing.xl) {
             HStack {
+                if compact {
+                    Button {
+                        withAnimation(.snappy(duration: 0.24)) { compactShowsDetail = false }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .buttonStyle(.atlas(.glass))
+                    .help("返回消息列表")
+                }
                 Image(systemName: item.symbol)
                     .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(tint(for: item.kind))
                     .frame(width: 42, height: 42)
-                    .background(Color.white.opacity(0.07), in: Circle())
+                    .atlasChromaticGlass(Circle(), tint: tint(for: item.kind))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.title)
                         .font(AtlasFont.title)
@@ -129,7 +240,7 @@ struct InboxView: View {
                     case .task:
                         model.destination = .tasks
                     case .world:
-                        model.destination = .canvas
+                        model.navigate(to: .canvas)
                     }
                 } label: {
                     AtlasButtonLabel(title: item.action, systemImage: "arrow.right")
@@ -137,7 +248,15 @@ struct InboxView: View {
                 .buttonStyle(.atlas(.primary))
             }
         }
-        .padding(AtlasSpacing.xxl)
+        .padding(compact ? AtlasSpacing.xl : AtlasSpacing.xxl)
+    }
+
+    private func tint(for kind: AtlasInboxItem.Kind) -> Color {
+        switch kind {
+        case .review: return AtlasColor.auroraViolet
+        case .task: return AtlasColor.auroraAmber
+        case .world: return AtlasColor.auroraMint
+        }
     }
 }
 
