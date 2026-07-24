@@ -1,0 +1,953 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Atlas · 星图 | 每一个企划都是一个世界</title>
+<style>
+  :root{
+    --signal:#f2f2f2;
+    --signal-muted:#a6a6a6;
+    --ink:#f7f7f7;
+    --muted:#a8a8ad;
+    --bg:#09090b;
+    --glass:rgba(255,255,255,.055);
+    --glass-strong:rgba(255,255,255,.085);
+    --glass-border:rgba(255,255,255,.16);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
+    font-family:system-ui,-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    color:var(--ink);-webkit-font-smoothing:antialiased}
+  #starmap-root{position:fixed!important;inset:0;width:100%;height:100%;overflow:hidden}
+  #scene{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab}
+  #scene.dragging{cursor:grabbing}
+  #starmap-root>[data-lg]{isolation:isolate}
+  #starmap-root>[data-lg]>canvas{z-index:0!important}
+
+  /* ---------- cinematic overlays ---------- */
+  #vignette{position:fixed;inset:0;z-index:30;pointer-events:none;
+    background:radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.42) 100%)}
+
+  /* ---------- brand / title ---------- */
+  #hero{position:fixed;inset:0;z-index:45;display:grid;place-items:center;pointer-events:none;
+    opacity:0;transition:opacity 1.4s ease}
+  body.ready #hero{opacity:1}
+  body.explored #hero{opacity:0;transition:opacity .8s ease}
+  #hero .inner{text-align:center;width:min(38vw,420px);min-width:220px}
+  #hero img{display:block;width:100%;height:auto;
+    filter:invert(1) drop-shadow(0 8px 36px rgba(255,255,255,.08));opacity:.94}
+
+  /* ---------- hud ---------- */
+  #hint{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:50;
+    color:var(--muted);font-size:12px;letter-spacing:.22em;text-indent:.22em;white-space:nowrap;
+    opacity:0;transition:opacity 1s ease}
+  body.ready #hint{opacity:.9}
+  body.deep #hint{opacity:0}
+  #hint em{font-style:normal;color:var(--ink)}
+
+  #legend{position:fixed;bottom:22px;left:28px;z-index:50;display:flex;gap:16px;
+    font-size:11px;color:var(--muted);opacity:0;transition:opacity 1s ease 1.2s}
+  body.ready #legend{opacity:1}
+  #legend i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px}
+
+  #counter{position:fixed;top:26px;right:174px;z-index:50;text-align:right;
+    font-size:11px;color:var(--muted);letter-spacing:.14em;opacity:0;transition:opacity 1s ease 1.2s}
+  body.ready #counter{opacity:1}
+  #counter b{display:block;color:var(--ink);font-size:20px;letter-spacing:.06em;font-weight:700}
+
+  /* ---------- tooltip (zoomed-out hover) ---------- */
+  #tooltip{position:fixed;z-index:60;pointer-events:none;padding:8px 12px;border-radius:8px;
+    background:var(--glass-strong);border:1px solid var(--glass-border);backdrop-filter:blur(24px) saturate(115%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 12px 34px rgba(0,0,0,.34);
+    font-size:12px;opacity:0;transition:opacity .15s ease;transform:translate(-50%,-140%);white-space:nowrap}
+  #tooltip b{display:block;font-size:13px;letter-spacing:.06em}
+  #tooltip span{color:var(--muted);font-size:11px}
+
+  /* ---------- project cards (zoomed-in morph) ---------- */
+  #cards{position:fixed;inset:0;z-index:35;pointer-events:none;overflow:hidden;opacity:1;transition:opacity .42s ease}
+  .star-card{position:absolute;top:0;left:0;z-index:35;width:196px;pointer-events:none;
+    transform:translate(-50%,-100%);transform-origin:50% 100%;
+    background:transparent;border:0;border-radius:12px;padding:12px 13px 11px;
+    opacity:0;transition:border-color .2s ease, box-shadow .2s ease;will-change:transform,opacity}
+  .star-card[data-lg="panel"]{z-index:35;padding:12px 13px 11px;text-align:left}
+  .star-card::after{content:"";position:absolute;left:50%;bottom:-15px;width:1px;height:15px;
+    background:linear-gradient(180deg,rgba(255,255,255,.48),transparent)}
+  .star-card::before{content:"";position:absolute;left:calc(50% - 2.5px);bottom:-18px;width:5px;height:5px;border-radius:50%;
+    background:var(--signal);box-shadow:0 0 10px rgba(255,255,255,.6)}
+  .star-card h4{font-size:14.5px;font-weight:700;letter-spacing:.05em;margin-bottom:4px;display:flex;align-items:center;gap:7px}
+  .star-card h4 i{width:6px;height:6px;border-radius:50%;flex:none}
+  .star-card .hook{font-size:11.5px;color:var(--muted);line-height:1.55;margin-bottom:9px;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .star-card .meta{display:flex;gap:5px;flex-wrap:wrap}
+  .star-card .meta span{font-size:10px;padding:2.5px 7px;border-radius:99px;letter-spacing:.05em;
+    border:1px solid rgba(255,255,255,.12);color:#c6cddb;background:rgba(255,255,255,.04)}
+  .star-card .meta span.st{border-color:rgba(143,212,168,.45);color:#a9e5bd}
+  .dot-recruit{background:#8fd4a8}.dot-live{background:#7aa8ff}.dot-pre{background:#e8c47a}.dot-done{background:#8a8f99}
+
+  /* ---------- browse nav (swipe between worlds, camera follows) ---------- */
+  .browse-nav-button{position:fixed;bottom:19px;z-index:50;width:42px;height:42px;
+    padding:0!important;border:1px solid rgba(255,255,255,.18);border-radius:50%;
+    background:rgba(14,15,21,.12);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.24),inset 0 -1px 0 rgba(255,255,255,.07),0 10px 28px rgba(0,0,0,.34);
+    color:var(--ink);font-size:19px;
+    cursor:pointer;visibility:hidden;pointer-events:none}
+  .browse-nav-button[data-lg="button"]{padding:0;display:grid;place-items:center}
+  .browse-nav-button.prev{left:calc(50% - 92px)}
+  .browse-nav-button.next{right:calc(50% - 92px)}
+  body.card-visible .browse-nav-button{visibility:visible;pointer-events:auto}
+  #bnCount{position:fixed;bottom:32px;left:50%;z-index:50;transform:translateX(-50%);
+    font-size:12px;letter-spacing:.2em;color:var(--muted);min-width:76px;text-align:center;
+    opacity:0;transition:opacity .4s ease}
+  body.card-visible #bnCount{opacity:1}
+
+  /* ---------- deep focus (zoom in → full project cards) ---------- */
+  #dim{position:fixed;inset:0;z-index:32;background:rgba(3,4,9,.72);opacity:0;pointer-events:none;transition:opacity .6s ease}
+  body.detail-visible #dim{opacity:1}
+  #focusmode{position:fixed;inset:0;z-index:65;display:none;pointer-events:none}
+  body.focusmode #focusmode{display:block}
+  .fm-card{position:absolute;left:50%;top:50%;z-index:67;width:min(540px,84vw);
+    background:transparent;border:0;border-radius:18px;padding:30px 32px 94px;
+    transition:transform .62s cubic-bezier(.22,.75,.22,1),border-color .25s ease;
+    visibility:hidden;pointer-events:none;transform:translate(-50%,-50%) scale(.78)}
+  .fm-card[data-lg="panel"]{z-index:67;padding:30px 32px 94px;text-align:left}
+  .fm-card .fm-status{display:inline-flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.16em;
+    color:var(--ink);border:1px solid rgba(255,255,255,.22);border-radius:99px;padding:4px 12px;margin-bottom:16px;
+    background:rgba(255,255,255,.045)}
+  .fm-card .fm-status i{width:7px;height:7px;border-radius:50%}
+  .fm-card h3{font-family:"Songti SC","STSong",serif;font-size:32px;letter-spacing:.1em;margin-bottom:12px}
+  .fm-card .hook{color:var(--muted);font-size:14px;line-height:1.85;margin-bottom:20px;
+    border-left:2px solid rgba(255,255,255,.28);padding-left:14px}
+  .fm-card .meta{display:flex;gap:6px;flex-wrap:wrap}
+  .fm-card .meta span{font-size:11px;padding:3px 9px;border-radius:99px;
+    border:1px solid rgba(255,255,255,.12);color:#c6cddb;background:rgba(255,255,255,.04)}
+  .fm-enter{position:absolute;left:50%;top:calc(50% + 105px);z-index:68;
+    width:min(476px,calc(84vw - 64px));height:48px;margin:0;padding:0 18px!important;
+    border:1px solid rgba(255,255,255,.2);border-radius:14px;background:rgba(14,15,21,.12);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.26),inset 0 -1px 0 rgba(255,255,255,.08),0 14px 34px rgba(0,0,0,.38);
+    color:var(--ink);font-size:12px;font-weight:650;
+    cursor:pointer;visibility:hidden;pointer-events:none;transform:translateX(-50%);
+    transition:transform .18s ease}
+  .fm-enter[data-lg="button"]{z-index:68;padding:0 18px;justify-content:stretch}
+  .fm-enter .lg-label{width:100%;justify-content:space-between}
+  body.detail-visible .fm-enter{visibility:visible;pointer-events:auto}
+  .fm-enter:hover{transform:translateX(-50%) translateY(-1px)}
+  .fm-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:68;width:50px;height:50px;
+    padding:0!important;border:1px solid rgba(255,255,255,.2);border-radius:50%;
+    background:rgba(14,15,21,.12);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.26),inset 0 -1px 0 rgba(255,255,255,.08),0 12px 32px rgba(0,0,0,.38);
+    color:var(--ink);font-size:22px;
+    cursor:pointer;visibility:hidden;pointer-events:none}
+  .fm-nav[data-lg="button"]{z-index:68;padding:0;display:grid;place-items:center}
+  body.detail-visible .fm-nav{visibility:visible;pointer-events:auto}
+  .fm-nav.prev{left:26px}.fm-nav.next{right:26px}
+  .fm-close{position:absolute;left:28px;top:26px;z-index:68;width:42px;height:42px;
+    padding:0!important;border:1px solid rgba(255,255,255,.2);border-radius:50%;
+    background:rgba(14,15,21,.12);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.26),inset 0 -1px 0 rgba(255,255,255,.08),0 12px 32px rgba(0,0,0,.38);
+    color:var(--ink);font-size:19px;
+    cursor:pointer;visibility:hidden;pointer-events:none}
+  .fm-close[data-lg="button"]{z-index:68;padding:0;display:grid;place-items:center}
+  body.detail-visible .fm-close{visibility:visible;pointer-events:auto}
+  body.detail-visible #hint,body.detail-visible #legend,body.detail-visible #counter,body.detail-visible #tooltip,
+  body.detail-visible .browse-nav-button,body.detail-visible #bnCount{opacity:0 !important;pointer-events:none}
+  body.detail-visible .star-card,body.simple-hidden .star-card{opacity:0 !important}
+
+  @media(max-width:640px){
+    #legend{display:none}
+    .star-card{width:168px}
+  }
+</style>
+</head>
+<body>
+<section id="starmap-root" data-lg-root>
+  <canvas id="scene" data-dynamic></canvas>
+
+  <div id="vignette"></div>
+
+  <div id="hero">
+    <div class="inner">
+      <img src="atlas-wordmark-vector.svg" alt="Atlas" />
+    </div>
+  </div>
+
+  <div id="hint"><em>拖拽</em> 旋转星野 &nbsp;·&nbsp; <em>滚轮</em> 缩放 &nbsp;·&nbsp; <em>点击节点</em> 聚焦企划</div>
+
+  <div id="legend">
+    <span><i class="dot-recruit"></i>招募中</span>
+    <span><i class="dot-live"></i>进行中</span>
+    <span><i class="dot-pre"></i>预热</span>
+    <span><i class="dot-done"></i>已结企</span>
+  </div>
+
+  <div id="counter"><b id="pcount">0</b>个世界正在运转</div>
+
+  <div id="tooltip"></div>
+  <div id="cards"></div>
+
+  <button class="browse-nav-button prev" id="bnPrev" title="上一个世界" aria-label="上一个世界"
+    data-lg="button" data-lg-config='{"button":true,"cornerRadius":21,"zRadius":44,"refraction":1.65,"edgeHighlight":0.72,"specular":0.78,"chromAberration":0.14,"shadowOpacity":0.5,"floating":false}'><span class="lg-label">‹</span></button>
+  <span id="bnCount">— / —</span>
+  <button class="browse-nav-button next" id="bnNext" title="下一个世界" aria-label="下一个世界"
+    data-lg="button" data-lg-config='{"button":true,"cornerRadius":21,"zRadius":44,"refraction":1.65,"edgeHighlight":0.72,"specular":0.78,"chromAberration":0.14,"shadowOpacity":0.5,"floating":false}'><span class="lg-label">›</span></button>
+
+  <div id="dim"></div>
+  <div id="focusmode"></div>
+  <button class="fm-close" id="fmExit" title="关闭" aria-label="关闭聚焦"
+    data-lg="button" data-lg-config='{"button":true,"cornerRadius":21,"zRadius":46,"refraction":1.72,"edgeHighlight":0.76,"specular":0.84,"chromAberration":0.15,"shadowOpacity":0.52,"floating":false}'><span class="lg-label">×</span></button>
+  <button class="fm-nav prev" id="fmPrev" title="上一个世界" aria-label="上一个世界"
+    data-lg="button" data-lg-config='{"button":true,"cornerRadius":25,"zRadius":52,"refraction":1.72,"edgeHighlight":0.76,"specular":0.84,"chromAberration":0.15,"shadowOpacity":0.52,"floating":false}'><span class="lg-label">‹</span></button>
+  <button class="fm-nav next" id="fmNext" title="下一个世界" aria-label="下一个世界"
+    data-lg="button" data-lg-config='{"button":true,"cornerRadius":25,"zRadius":52,"refraction":1.72,"edgeHighlight":0.76,"specular":0.84,"chromAberration":0.15,"shadowOpacity":0.52,"floating":false}'><span class="lg-label">›</span></button>
+</section>
+
+<script src="three.min.js"></script>
+<script src="liquidglass.lib.js"></script>
+<script src="lg-kit.js"></script>
+<script>
+/* ============================================================
+   ATLAS STARCHART — cinematic star map for 企划 worlds
+   ============================================================ */
+
+/* ---------------- project data ---------------- */
+const STATUS = {
+  recruit:{label:'招募中', cls:'dot-recruit', color:0x8fd4a8},
+  live:   {label:'进行中', cls:'dot-live',   color:0x7aa8ff},
+  pre:    {label:'预热',   cls:'dot-pre',    color:0xe8c47a},
+  done:   {label:'已结企', cls:'dot-done',   color:0x8a8f99},
+};
+
+const CLUSTERS = [
+  { name:'潮汐星域', center:[  0,  8,  0] },
+  { name:'车站星域', center:[ 95, -18, -55] },
+  { name:'回声星域', center:[-88, 20, -70] },
+  { name:'雾海星域', center:[ 20, -30, 105] },
+  { name:'白塔星域', center:[-60, 42, 80] },
+];
+
+const PROJECTS = [
+  { name:'极光档案', hook:'潮汐带走声音，白塔保存远航记录。在失声海域，每一次记录都是对抗遗忘。', type:'混合企', status:'recruit', members:27, host:'岑', deadline:'08-02', ai:'仅管理辅助 · 图片生成全局关闭 · 所有 AI 提取需主催采纳', c:0 },
+  { name:'第九车站', hook:'一班不存在的末班车，每晚 23:59 进站。下车的乘客都少了一段记忆。', type:'文企', status:'recruit', members:19, host:'弥砂', deadline:'08-10', ai:'完全无 AI · 人工审核 · 设定组双签', c:1 },
+  { name:'群星回声', hook:'漂流舰队收到三百年前的自己的回信。你决定回，还是不回。', type:'文企', status:'live', members:41, host:'伊莱', deadline:'—', ai:'自定义文本能力 · 参与者可退出 AI 辅助', c:2 },
+  { name:'雾海大陆', hook:'雾每七年退一次，露出的不是陆地，是上一纪元的城。', type:'画企', status:'recruit', members:33, host:'汀', deadline:'08-15', ai:'仅整理与查漏 · 严禁画风模仿', c:3 },
+  { name:'白塔灯塔守', hook:'灯塔守世代不得离塔。直到有人把灯熄了一夜。', type:'混合企', status:'live', members:22, host:'岑', deadline:'—', ai:'仅管理辅助 · NPC 草案需双方确认', c:4 },
+  { name:'失声海域', hook:'水手说，海拿走声音是为了替谁保守秘密。', type:'画企', status:'pre', members:8, host:'阿沨', deadline:'08-20', ai:'完全无 AI', c:0 },
+  { name:'夜航守望', hook:'夜航线上的瞭望员，负责替整座城市做梦。', type:'文企', status:'recruit', members:14, host:'弥砂', deadline:'08-06', ai:'仅管理辅助', c:0 },
+  { name:'灰烬温室', hook:'末日后的最后一座温室里，植物学家养的不是花，是春天这个概念。', type:'混合企', status:'live', members:36, host:'苔', deadline:'—', ai:'自定义文本能力', c:3 },
+  { name:'月台寄存处', hook:'每个寄存柜里都存着一件没人敢取走的人生。', type:'画企', status:'pre', members:5, host:'小辙', deadline:'08-25', ai:'完全无 AI', c:1 },
+  { name:'回声测绘局', hook:'我们的工作是把回声画成地图，尽管没人知道回声愿不愿意。', type:'文企', status:'recruit', members:17, host:'伊莱', deadline:'08-12', ai:'仅整理与查漏', c:2 },
+  { name:'盐与信标', hook:'灯塔之间用盐通信。咸度是坐标，也是遗言。', type:'画企', status:'done', members:29, host:'汀', deadline:'已结企', ai:'仅管理辅助', c:4 },
+  { name:'深空拾荒者', hook:'打捞沉船的人从不问船是怎么沉的，这是他们活得久的唯一原因。', type:'跑团企', status:'recruit', members:12, host:'老轨', deadline:'08-08', ai:'AI 仅作书记员', c:2 },
+  { name:'信天翁邮局', hook:'给不存在的人写信是我们的主营业务。退信率 0%。', type:'混合企', status:'live', members:25, host:'阿沨', deadline:'—', ai:'自定义文本能力', c:4 },
+  { name:'第七温室', hook:'温室里的雪只下在每周三，因为园丁只记得周三。', type:'文企', status:'pre', members:6, host:'苔', deadline:'08-30', ai:'完全无 AI', c:3 },
+  { name:'无灯之城', hook:'城里禁止一切光源，因为光会让居民想起自己是谁。', type:'混合企', status:'recruit', members:31, host:'岑', deadline:'08-18', ai:'仅管理辅助 · 图片全局关闭', c:1 },
+  { name:'候鸟档案馆', hook:'候鸟每年带回一段南方的记忆，馆员负责分辨哪些是真的。', type:'文企', status:'done', members:38, host:'弥砂', deadline:'已结企', ai:'仅整理与查漏', c:4 },
+];
+
+document.getElementById('pcount').textContent = PROJECTS.length;
+
+/* ---------------- renderer / scene ---------------- */
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias:true,
+  alpha:false,
+  preserveDrawingBuffer:true
+});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setClearColor(0x09090b, 1);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x09090b, 0.0016);
+
+const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 3000);
+let viewportWidth = 1, viewportHeight = 1;
+function resizeScene(){
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(1, Math.round(rect.width));
+  const height = Math.max(1, Math.round(rect.height));
+  if(width===viewportWidth && height===viewportHeight) return;
+  viewportWidth=width; viewportHeight=height;
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(width,height,false);
+  camera.aspect=width/height;
+  camera.updateProjectionMatrix();
+}
+resizeScene();
+new ResizeObserver(resizeScene).observe(document.documentElement);
+
+/* ---------------- background starfield (shader points) ---------------- */
+function buildStars(count){
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(count*3);
+  const col = new Float32Array(count*3);
+  const size = new Float32Array(count);
+  const phase = new Float32Array(count);
+  const palette = [
+    [0.82,0.88,1.0],[1.0,0.95,0.85],[0.85,0.95,0.92],
+    [0.95,0.88,1.0],[0.72,0.80,1.0],[1.0,1.0,1.0]
+  ];
+  for(let i=0;i<count;i++){
+    // shell distribution with a few arms
+    const r = 260 + Math.pow(Math.random(),0.6)*900;
+    const arm = Math.random()<0.55 ? Math.floor(Math.random()*3) : -1;
+    let th = Math.random()*Math.PI*2, ph = Math.acos(2*Math.random()-1);
+    if(arm>=0){
+      th = arm*(Math.PI*2/3) + r*0.0012 + (Math.random()-0.5)*0.7;
+      ph = Math.PI/2 + (Math.random()-0.5)*0.5;
+    }
+    pos[i*3]   = r*Math.sin(ph)*Math.cos(th);
+    pos[i*3+1] = r*Math.cos(ph)*0.6;
+    pos[i*3+2] = r*Math.sin(ph)*Math.sin(th);
+    const c = palette[(Math.random()*palette.length)|0];
+    const b = 0.5+Math.random()*0.5;
+    col[i*3]=c[0]*b; col[i*3+1]=c[1]*b; col[i*3+2]=c[2]*b;
+    size[i] = 1.2 + Math.pow(Math.random(),3)*5.0;
+    phase[i] = Math.random();
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('customColor', new THREE.BufferAttribute(col,3));
+  geo.setAttribute('size', new THREE.BufferAttribute(size,1));
+  geo.setAttribute('phase', new THREE.BufferAttribute(phase,1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms:{ time:{value:0} },
+    vertexShader:`
+      attribute float size; attribute vec3 customColor; attribute float phase;
+      uniform float time;
+      varying vec3 vC; varying float vP;
+      void main(){
+        vC = customColor; vP = phase;
+        vec4 mv = modelViewMatrix * vec4(position,1.0);
+        float tw = 0.72 + 0.28*sin(time*1.4 + phase*6.2831);
+        gl_PointSize = size * tw * (320.0 / -mv.z);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader:`
+      varying vec3 vC; varying float vP;
+      void main(){
+        float d = length(gl_PointCoord - 0.5);
+        float a = smoothstep(0.5, 0.03, d);
+        gl_FragColor = vec4(vC, a*0.9);
+      }`,
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending
+  });
+  return new THREE.Points(geo, mat);
+}
+const stars = buildStars(5200);
+scene.add(stars);
+
+/* ---------------- nebula sprites ---------------- */
+function nebulaTexture(hueA, hueB){
+  const s = 256, cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);
+  g.addColorStop(0, hueA);
+  g.addColorStop(0.45, hueB);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,s,s);
+  const t = new THREE.CanvasTexture(cv);
+  return t;
+}
+const nebTex = [
+  nebulaTexture('rgba(96,80,190,0.55)','rgba(60,50,140,0.22)'),
+  nebulaTexture('rgba(70,150,160,0.5)','rgba(40,90,110,0.2)'),
+  nebulaTexture('rgba(190,120,90,0.4)','rgba(120,70,60,0.16)'),
+  nebulaTexture('rgba(90,120,210,0.5)','rgba(50,70,150,0.2)'),
+];
+const nebulae = [];
+for(let i=0;i<26;i++){
+  const m = new THREE.SpriteMaterial({
+    map: nebTex[i%nebTex.length], transparent:true, depthWrite:false,
+    blending:THREE.AdditiveBlending, opacity:0.16+Math.random()*0.22
+  });
+  const sp = new THREE.Sprite(m);
+  const r = 380+Math.random()*700;
+  const th = Math.random()*Math.PI*2, ph = Math.acos(2*Math.random()-1);
+  sp.position.set(r*Math.sin(ph)*Math.cos(th), r*Math.cos(ph)*0.5, r*Math.sin(ph)*Math.sin(th));
+  const sc = 260+Math.random()*420;
+  sp.scale.set(sc, sc, 1);
+  sp.userData.drift = (Math.random()-0.5)*0.008;
+  scene.add(sp);
+  nebulae.push(sp);
+}
+
+/* ---------------- project star worlds ---------------- */
+const glowGeometry = new THREE.PlaneGeometry(1,1);
+function glowMaterial(color, opacity){
+  return new THREE.ShaderMaterial({
+    uniforms:{
+      glowColor:{value:new THREE.Color(color)},
+      opacity:{value:opacity}
+    },
+    vertexShader:`
+      varying vec2 vUv;
+      void main(){
+        vUv=uv;
+        gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);
+      }`,
+    fragmentShader:`
+      varying vec2 vUv;
+      uniform vec3 glowColor;
+      uniform float opacity;
+      void main(){
+        float d=length(vUv-0.5)*2.0;
+        float core=exp(-d*d*90.0);
+        float inner=exp(-d*d*14.0);
+        float aura=exp(-d*d*3.6);
+        float alpha=min(1.0,core+inner*0.72+aura*0.18)*opacity;
+        if(alpha<0.003) discard;
+        gl_FragColor=vec4(glowColor,alpha);
+      }`,
+    transparent:true,
+    depthWrite:false,
+    blending:THREE.AdditiveBlending
+  });
+}
+
+const worlds = [];   // {sprite, halo, pos, data}
+
+PROJECTS.forEach((p,i)=>{
+  const cl = CLUSTERS[p.c];
+  const ang = (i*2.399) + p.c;         // golden-angle spread inside cluster
+  const rr = 10 + (i%5)*7 + Math.random()*9;
+  const pos = new THREE.Vector3(
+    cl.center[0] + Math.cos(ang)*rr,
+    cl.center[1] + (Math.random()-0.5)*22,
+    cl.center[2] + Math.sin(ang)*rr
+  );
+  const st = STATUS[p.status];
+  // core glow sprite
+  const mat = glowMaterial(st.color,0.95);
+  const sp = new THREE.Mesh(glowGeometry,mat);
+  sp.position.copy(pos);
+  sp.scale.set(6.5,6.5,1);
+  sp.userData.worldIndex = i;
+  scene.add(sp);
+  // faint outer halo
+  const halo = new THREE.Mesh(glowGeometry,glowMaterial(st.color,0.16));
+  halo.position.copy(pos);
+  halo.scale.set(20,20,1);
+  scene.add(halo);
+  worlds.push({ sp, halo, pos, data:p, baseScale:6.5, phase:Math.random()*Math.PI*2 });
+});
+
+/* 注：企划之间默认不连线——企划互联存在但不普遍，星域聚簇仅用于空间分布 */
+
+/* ---------------- camera rig (spherical orbit) ---------------- */
+const rig = {
+  theta:-0.9, phi:1.75, dist:460,
+  vTheta:0, vPhi:0, targetDist:460,
+  lookAt:new THREE.Vector3(0,0,0),
+  tween:null, idle:0, userDrove:false
+};
+function rigApply(){
+  camera.position.set(
+    rig.lookAt.x + rig.dist*Math.sin(rig.phi)*Math.cos(rig.theta),
+    rig.lookAt.y + rig.dist*Math.cos(rig.phi),
+    rig.lookAt.z + rig.dist*Math.sin(rig.phi)*Math.sin(rig.theta)
+  );
+  camera.lookAt(rig.lookAt);
+}
+function tweenTo(props, dur=1.6, ease=easeInOut){
+  rig.tween = { t:0, dur, ease,
+    from:{ theta:rig.theta, phi:rig.phi, dist:rig.dist, look:rig.lookAt.clone() },
+    to:props };
+}
+const easeInOut = t => t<0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2;
+const easeOut = t => 1-Math.pow(1-t,3);
+
+/* intro dolly */
+rig.tween = { t:0, dur:4.6, ease:easeInOut,
+  from:{ theta:rig.theta, phi:rig.phi, dist:rig.dist, look:new THREE.Vector3(0,40,0) },
+  to:{ theta:0.35, phi:1.32, dist:170, look:new THREE.Vector3(0,6,0) } };
+
+/* ---------------- input ---------------- */
+let dragging=false, px=0, py=0, pinch=0;
+const explored = () => document.body.classList.add('explored');
+
+canvas.addEventListener('pointerdown', e=>{
+  if(focusMode) return;
+  dragging=true; px=e.clientX; py=e.clientY; rig.idle=0; canvas.classList.add('dragging');
+});
+addEventListener('pointermove', e=>{
+  if(focusMode) return;
+  if(dragging){
+    const dx=e.clientX-px, dy=e.clientY-py; px=e.clientX; py=e.clientY;
+    rig.vTheta = -dx*0.0032; rig.vPhi = -dy*0.0026;
+    rig.theta += rig.vTheta; rig.phi = THREE.MathUtils.clamp(rig.phi+rig.vPhi, 0.15, Math.PI-0.15);
+    rig.tween=null; rig.idle=0; rig.userDrove=true; navLock=null; explored();
+  }
+  hoverCheck(e.clientX, e.clientY);
+});
+addEventListener('pointerup', ()=>{ dragging=false; canvas.classList.remove('dragging'); });
+let navAcc = 0, navTime = 0;
+canvas.addEventListener('wheel', e=>{
+  if(focusMode) return;
+  e.preventDefault();
+  rig.userDrove = true; explored();
+  // 横向滚动（触控板双指横滑）→ 切换世界，星图跟随飞行
+  if(Math.abs(e.deltaX) > Math.abs(e.deltaY) && rig.dist < CARD_FAR){
+    const now = performance.now();
+    if(now > navTime){
+      navAcc += e.deltaX;
+      if(Math.abs(navAcc) > 50){ navTime = now + 600; navStep(Math.sign(navAcc)); navAcc = 0; }
+    }
+    return;
+  }
+  rig.tween = null;
+  rig.targetDist = THREE.MathUtils.clamp(rig.targetDist * (1 + e.deltaY*0.0011), 22, 520);
+}, {passive:false});
+
+canvas.addEventListener('touchstart', e=>{
+  if(focusMode) return;
+  if(e.touches.length===2){ pinch = Math.hypot(
+    e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY); }
+  if(e.touches.length===1){ flickX=e.touches[0].clientX; flickY=e.touches[0].clientY; flickT=performance.now(); }
+  rig.idle=0;
+},{passive:true});
+let flickX=0, flickY=0, flickT=0;
+canvas.addEventListener('touchend', e=>{
+  if(focusMode) return;
+  if(!e.changedTouches.length || !flickT) return;
+  // 快速横向 flick → 切换世界（慢拖仍是旋转）
+  const dt = performance.now()-flickT;
+  const dx = e.changedTouches[0].clientX-flickX, dy = e.changedTouches[0].clientY-flickY;
+  if(dt<350 && Math.abs(dx)>60 && Math.abs(dy)<50 && rig.dist<CARD_FAR){
+    navStep(dx<0 ? 1 : -1);
+  }
+  flickT=0;
+},{passive:true});
+canvas.addEventListener('touchmove', e=>{
+  if(focusMode) return;
+  if(e.touches.length===2){
+    const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    if(pinch>0){ rig.targetDist = THREE.MathUtils.clamp(rig.targetDist * pinch/d, 22, 520); }
+    pinch = d; rig.tween=null; rig.userDrove=true; explored();
+  }
+},{passive:true});
+
+/* click: raycast world sprites -> fly to */
+const raycaster = new THREE.Raycaster();
+const mouseV = new THREE.Vector2();
+let downX=0, downY=0;
+function worldAtScreen(x,y,radius=22){
+  let nearest=null,nearestDistance=radius;
+  for(const w of worlds){
+    projV.copy(w.pos).project(camera);
+    if(projV.z>1||projV.z<-1) continue;
+    const sx=(projV.x*0.5+0.5)*viewportWidth;
+    const sy=(-projV.y*0.5+0.5)*viewportHeight;
+    const distance=Math.hypot(x-sx,y-sy);
+    if(distance<nearestDistance){nearest=w;nearestDistance=distance;}
+  }
+  return nearest;
+}
+canvas.addEventListener('pointerdown', e=>{ downX=e.clientX; downY=e.clientY; });
+canvas.addEventListener('click', e=>{
+  if(focusMode) return;
+  if(Math.hypot(e.clientX-downX, e.clientY-downY)>6) return; // was a drag
+  const nearby=worldAtScreen(e.clientX,e.clientY);
+  if(nearby){beginFocus(nearby);return;}
+  mouseV.set(e.clientX/viewportWidth*2-1, -(e.clientY/viewportHeight)*2+1);
+  raycaster.setFromCamera(mouseV, camera);
+  const hits = raycaster.intersectObjects(worlds.map(w=>w.sp));
+  if(hits.length){
+    const w = worlds[hits[0].object.userData.worldIndex];
+    beginFocus(w);
+  }
+});
+function flyToWorld(w, dist=60){
+  const p = w.pos;
+  const dir = camera.position.clone().sub(p).normalize();
+  const camTarget = p.clone().add(dir.multiplyScalar(dist));
+  const look = rig.lookAt;
+  // convert desired camera pos to spherical around new lookAt (the world)
+  const off = camTarget.clone().sub(p);
+  const newDist = off.length();
+  const newPhi = Math.acos(THREE.MathUtils.clamp(off.y/newDist,-1,1));
+  const newTheta = Math.atan2(off.z, off.x);
+  tweenTo({ theta:newTheta, phi:newPhi, dist:newDist, look:p.clone() }, 1.8);
+  rig.targetDist = newDist;
+  navLock = w;
+  navIndex = chain.indexOf(worlds.indexOf(w));
+  explored();
+}
+
+/* hover tooltip when far */
+const tooltip = document.getElementById('tooltip');
+function hoverCheck(x,y){
+  if(rig.dist < 130){ tooltip.style.opacity=0; canvas.style.cursor = dragging?'grabbing':'grab'; return; }
+  const nearby=worldAtScreen(x,y);
+  if(nearby){
+    tooltip.innerHTML = `<b>${nearby.data.name}</b><span>${STATUS[nearby.data.status].label} · ${nearby.data.type} · ${nearby.data.members}人</span>`;
+    tooltip.style.left = x+'px'; tooltip.style.top = y+'px';
+    tooltip.style.opacity = 1; canvas.style.cursor='pointer';
+    return;
+  }
+  mouseV.set(x/viewportWidth*2-1, -(y/viewportHeight)*2+1);
+  raycaster.setFromCamera(mouseV, camera);
+  const hits = raycaster.intersectObjects(worlds.map(w=>w.sp));
+  if(hits.length){
+    const w = worlds[hits[0].object.userData.worldIndex];
+    tooltip.innerHTML = `<b>${w.data.name}</b><span>${STATUS[w.data.status].label} · ${w.data.type} · ${w.data.members}人</span>`;
+    tooltip.style.left = x+'px'; tooltip.style.top = y+'px';
+    tooltip.style.opacity = 1; canvas.style.cursor='pointer';
+  } else {
+    tooltip.style.opacity = 0; canvas.style.cursor = dragging?'grabbing':'grab';
+  }
+}
+
+/* ---------------- project cards ---------------- */
+const starmapRoot = document.getElementById('starmap-root');
+const focusCard = document.createElement('div');
+focusCard.className='star-card';
+focusCard.dataset.lg='panel';
+focusCard.dataset.lgConfig=JSON.stringify({
+  blurAmount:0.24,refraction:0.92,chromAberration:0.08,edgeHighlight:0.11,
+  specular:0.12,fresnel:1,cornerRadius:12,zRadius:18,brightness:-0.24,
+  shadowOpacity:0.34,shadowSpread:14,floating:false
+});
+starmapRoot.appendChild(focusCard);
+let renderedWorld = null;
+function renderFocusCard(w){
+  if(renderedWorld===w) return;
+  const st = STATUS[w.data.status];
+  focusCard.innerHTML = `<div class="lg-label">
+    <h4><i class="${st.cls}"></i>${w.data.name}</h4>
+    <p class="hook">${w.data.hook}</p>
+    <div class="meta"><span class="st">${st.label}</span><span>${w.data.type}</span><span>${w.data.members}人</span></div>
+  </div>`;
+  renderedWorld = w;
+}
+
+const CARD_FAR = 130, CARD_NEAR = 70;   // zoom thresholds
+const projV = new THREE.Vector3();
+let focusedWorld = null;
+
+/* 中距：只聚焦屏幕中心最近的一个世界（单卡，永不堆叠） */
+function updateCards(){
+  if(!focusMode && rig.dist >= CARD_FAR) navLock = null;
+  const t = THREE.MathUtils.clamp((CARD_FAR - rig.dist)/(CARD_FAR - CARD_NEAR), 0, 1);
+  let best = null;
+  if(t>0.02){
+    const candidates = navLock ? [navLock] : worlds;
+    for(const w of candidates){
+      projV.copy(w.pos).project(camera);
+      if(projV.z>1 || projV.z<-1){ w._vis=0; continue; }
+      const x = (projV.x*0.5+0.5)*viewportWidth;
+      const y = (-projV.y*0.5+0.5)*viewportHeight;
+      const m = 140;
+      if(x<-m||x>viewportWidth+m||y<-m||y>viewportHeight+m){ w._vis=0; continue; }
+      const cd = Math.hypot(x-viewportWidth/2, y-viewportHeight/2);
+      if(!best || cd<best.cd) best = {w,x,y,cd};
+    }
+  }
+  focusedWorld = best ? best.w : null;
+  const focusedIndex = focusedWorld ? chain.indexOf(worlds.indexOf(focusedWorld)) : -1;
+  document.getElementById('bnCount').textContent =
+    focusedIndex >= 0 ? `${focusedIndex+1} / ${chain.length}` : `— / ${chain.length}`;
+  for(const w of worlds){
+    const on = best && best.w===w ? 1 : 0;
+    w._vis = (w._vis||0) + ((on - (w._vis||0))*0.16);
+  }
+  if(best){
+    renderFocusCard(best.w);
+    const o = best.w._vis*t;
+    const s = 0.55 + 0.45*best.w._vis*t;
+    focusCard.style.opacity = o.toFixed(3);
+    focusCard.style.transform = `translate(${best.x.toFixed(1)}px,${(best.y-26).toFixed(1)}px) translate(-50%,-100%) scale(${s.toFixed(3)})`;
+    document.body.classList.toggle('card-visible', o > 0.18);
+  } else {
+    focusCard.style.opacity = '0';
+    document.body.classList.remove('card-visible');
+  }
+  document.body.classList.toggle('deep', rig.dist < CARD_FAR);
+}
+
+/* ---------------- browse: 左右滑动切换世界，镜头跟随飞行 ----------------
+   遍历顺序：贪心最近邻链，保证每次切换都飞向"附近"的世界，运镜连续 */
+let navLock = null, navIndex = 0;
+const chain = (function(){
+  const idx = worlds.map((w,i)=>i);
+  const order = [idx.shift()];
+  while(idx.length){
+    const cur = order[order.length-1];
+    let bi = 0, bd = Infinity;
+    for(const ri of idx){
+      const d = worlds[cur].pos.distanceTo(worlds[ri].pos);
+      if(d<bd){ bd=d; bi=ri; }
+    }
+    order.push(bi); idx.splice(idx.indexOf(bi),1);
+  }
+  return order;
+})();
+
+function navStep(dir){
+  let wi = navLock ? worlds.indexOf(navLock)
+         : focusedWorld ? worlds.indexOf(focusedWorld) : 0;
+  let ci = chain.indexOf(wi); if(ci<0) ci=0;
+  const ni = THREE.MathUtils.clamp(ci+dir, 0, chain.length-1);
+  if(ni===ci) return;
+  flyToWorld(worlds[chain[ni]], 55);
+}
+
+document.getElementById('bnPrev').onclick = ()=>navStep(-1);
+document.getElementById('bnNext').onclick = ()=>navStep(1);
+
+addEventListener('keydown', e=>{
+  if(focusMode) return;
+  if(rig.dist >= CARD_FAR) return;
+  if(e.key==='ArrowRight') navStep(1);
+  else if(e.key==='ArrowLeft') navStep(-1);
+  else if(e.key==='Escape'){ navLock=null; rig.targetDist=170; }
+});
+
+/* ---------------- clicked focus: cinematic camera → full card ---------------- */
+let focusMode=false, focusBusy=false, focusWorld=null, focusPhase='free', phaseAt=0;
+let switchTarget=null;
+const focusmode=document.getElementById('focusmode');
+const detailCard=document.createElement('div');
+detailCard.className='fm-card';
+detailCard.dataset.lg='panel';
+detailCard.dataset.lgConfig=JSON.stringify({
+  blurAmount:0.3,refraction:1.12,chromAberration:0.12,edgeHighlight:0.14,
+  specular:0.18,fresnel:1,cornerRadius:18,zRadius:28,brightness:-0.2,
+  shadowOpacity:0.42,shadowSpread:20,floating:false
+});
+starmapRoot.appendChild(detailCard);
+
+const enterButton=document.createElement('button');
+enterButton.id='fmEnter';
+enterButton.className='fm-enter';
+enterButton.type='button';
+enterButton.dataset.lg='button';
+enterButton.dataset.lgConfig=JSON.stringify({
+  button:true,cornerRadius:14,zRadius:44,refraction:1.72,chromAberration:0.15,
+  edgeHighlight:0.76,specular:0.84,fresnel:1,shadowOpacity:0.52,
+  shadowSpread:18,floating:false
+});
+enterButton.innerHTML='<span class="lg-label"><span>进入世界</span><span>→</span></span>';
+starmapRoot.appendChild(enterButton);
+
+function renderDetail(w){
+  const p=w.data, st=STATUS[p.status];
+  detailCard.innerHTML=`
+    <div class="lg-label">
+      <div class="fm-status"><i class="${st.cls}"></i>${st.label}</div>
+      <h3>${p.name}</h3>
+      <p class="hook">${p.hook}</p>
+      <div class="meta"><span>${p.type}</span><span>${p.members} 人</span><span>管理者 · ${p.host}</span><span>截止 · ${p.deadline}</span></div>
+    </div>`;
+  enterButton.onclick=()=>openAtlasWorld(p.name);
+  const ci=chain.indexOf(worlds.indexOf(w));
+  document.getElementById('fmPrev').disabled=ci<=0;
+  document.getElementById('fmNext').disabled=ci>=chain.length-1;
+}
+
+function openAtlasWorld(name){
+  if(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.atlasBridge){
+    window.webkit.messageHandlers.atlasBridge.postMessage({type:'openWorld', name});
+  }
+}
+
+function hideDetail(){
+  document.body.classList.remove('detail-visible');
+  detailCard.classList.remove('current');
+  detailCard.style.visibility='hidden';
+  detailCard.style.pointerEvents='none';
+  detailCard.style.transform='translate(-50%,-50%) scale(.78)';
+}
+
+function showDetail(){
+  focusPhase='detail';
+  focusBusy=false;
+  document.body.classList.remove('simple-hidden');
+  document.body.classList.add('detail-visible');
+  detailCard.classList.add('current');
+  detailCard.style.visibility='visible';
+  detailCard.style.pointerEvents='auto';
+  detailCard.style.transform='translate(-50%,-50%) scale(1)';
+}
+
+function beginFocus(w){
+  if(focusBusy || focusMode) return;
+  focusMode=true; focusBusy=true; focusWorld=w; switchTarget=null;
+  focusPhase='flying'; phaseAt=performance.now();
+  navLock=w; renderFocusCard(w); renderDetail(w); hideDetail();
+  document.body.classList.add('focusmode');
+  document.body.classList.remove('simple-hidden');
+  flyToWorld(w,55);
+}
+
+function switchFocus(dir){
+  if(!focusMode || focusBusy || !focusWorld) return;
+  const ci=chain.indexOf(worlds.indexOf(focusWorld));
+  const ni=THREE.MathUtils.clamp(ci+dir,0,chain.length-1);
+  if(ni===ci) return;
+  focusBusy=true; focusPhase='switch-out'; phaseAt=performance.now();
+  switchTarget=worlds[chain[ni]];
+  navLock=focusWorld;
+  renderFocusCard(focusWorld);
+  hideDetail();
+}
+
+function startSwitchFlight(){
+  focusPhase='switch-flight'; phaseAt=performance.now();
+  document.body.classList.add('simple-hidden');
+  navLock=switchTarget;
+  renderFocusCard(switchTarget);
+  renderDetail(switchTarget);
+  flyToWorld(switchTarget,55);
+}
+
+function finishSwitchFlight(){
+  focusWorld=switchTarget; switchTarget=null;
+  focusPhase='target-preview'; phaseAt=performance.now();
+  document.body.classList.remove('simple-hidden');
+}
+
+function exitFocus(){
+  if(!focusMode || focusBusy) return;
+  focusBusy=true; focusPhase='exit'; phaseAt=performance.now();
+  hideDetail();
+  navLock=focusWorld;
+  renderFocusCard(focusWorld);
+}
+
+function finishExit(){
+  focusMode=false; focusBusy=false; focusWorld=null; switchTarget=null; focusPhase='free';
+  document.body.classList.remove('focusmode','detail-visible','simple-hidden','card-visible');
+  navLock=null;
+  rig.targetDist=Math.max(150,rig.dist);
+  rig.idle=0;
+}
+
+let focusWheelAcc=0,focusWheelLock=0;
+addEventListener('wheel',e=>{
+  if(!focusMode) return;
+  e.preventDefault();
+  const now=performance.now();
+  if(now<focusWheelLock || focusBusy) return;
+  focusWheelAcc+=(Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY);
+  if(Math.abs(focusWheelAcc)>55){
+    focusWheelLock=now+720;
+    switchFocus(focusWheelAcc>0?1:-1);
+    focusWheelAcc=0;
+  }
+},{passive:false});
+
+addEventListener('keydown',e=>{
+  if(!focusMode) return;
+  if(e.key==='ArrowRight') switchFocus(1);
+  else if(e.key==='ArrowLeft') switchFocus(-1);
+  else if(e.key==='Escape') exitFocus();
+});
+
+let fmTX=0,fmTY=0;
+focusmode.addEventListener('touchstart',e=>{
+  if(e.touches.length){ fmTX=e.touches[0].clientX; fmTY=e.touches[0].clientY; }
+},{passive:true});
+focusmode.addEventListener('touchend',e=>{
+  if(!e.changedTouches.length) return;
+  const dx=e.changedTouches[0].clientX-fmTX,dy=e.changedTouches[0].clientY-fmTY;
+  if(Math.abs(dx)>50 && Math.abs(dx)>Math.abs(dy)) switchFocus(dx<0?1:-1);
+  else if(dy>70) exitFocus();
+},{passive:true});
+document.getElementById('fmPrev').onclick=()=>switchFocus(-1);
+document.getElementById('fmNext').onclick=()=>switchFocus(1);
+document.getElementById('fmExit').onclick=exitFocus;
+
+/* ---------------- main loop ---------------- */
+const clock = new THREE.Clock();
+let firstFrame = true;
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  // tween
+  if(rig.tween){
+    const tw = rig.tween;
+    tw.t += dt/tw.dur;
+    const k = tw.ease(Math.min(tw.t,1));
+    rig.theta = tw.from.theta + ((tw.to.theta??tw.from.theta)-tw.from.theta)*k;
+    rig.phi   = tw.from.phi   + ((tw.to.phi  ??tw.from.phi)  -tw.from.phi)*k;
+    rig.dist  = tw.from.dist  + ((tw.to.dist ??tw.from.dist) -tw.from.dist)*k;
+    rig.lookAt.lerpVectors(tw.from.look, tw.to.look ?? tw.from.look, k);
+    rig.targetDist = rig.dist;
+    if(tw.t>=1) rig.tween=null;
+  } else {
+    // inertia
+    if(!dragging){
+      rig.theta += rig.vTheta; rig.phi = THREE.MathUtils.clamp(rig.phi+rig.vPhi, 0.15, Math.PI-0.15);
+      rig.vTheta *= 0.94; rig.vPhi *= 0.94;
+      // idle drift
+      rig.idle += dt;
+      if(rig.idle>4) rig.theta += 0.00035;
+    }
+    rig.dist += (rig.targetDist - rig.dist)*0.08;
+  }
+  rigApply();
+
+  // Focus choreography is advanced inside the same render loop so camera,
+  // preview card, dimmer and detail card never interrupt one another.
+  if(focusMode){
+    const age=performance.now()-phaseAt;
+    if(focusPhase==='flying' && !rig.tween){
+      focusPhase='target-preview'; phaseAt=performance.now();
+    } else if(focusPhase==='target-preview' && age>320){
+      focusPhase='detail-in'; phaseAt=performance.now();
+      document.body.classList.add('simple-hidden');
+    } else if(focusPhase==='detail-in' && age>160){
+      showDetail();
+    } else if(focusPhase==='switch-out' && age>460){
+      focusPhase='switch-preview-out'; phaseAt=performance.now();
+      document.body.classList.add('simple-hidden');
+    } else if(focusPhase==='switch-preview-out' && age>320){
+      startSwitchFlight();
+    } else if(focusPhase==='switch-flight'){
+      if(rig.tween && rig.tween.t>.58) document.body.classList.remove('simple-hidden');
+      if(!rig.tween) finishSwitchFlight();
+    } else if(focusPhase==='exit' && age>620){
+      finishExit();
+    }
+  }
+
+  // uniforms & ambience
+  stars.material.uniforms.time.value = t;
+  stars.rotation.y = t*0.004;
+  nebulae.forEach(n=>{ n.position.y += Math.sin(t*0.2 + n.userData.drift*400)*0.006; n.material.rotation += n.userData.drift*0.12; });
+
+  // world star breathing + morph shrink when card visible
+  worlds.forEach(w=>{
+    const pulse = 1 + Math.sin(t*2 + w.phase)*0.12;
+    const shrink = 1 - (w._vis||0)*0.55;
+    const s = w.baseScale*pulse*shrink;
+    w.sp.quaternion.copy(camera.quaternion);
+    w.halo.quaternion.copy(camera.quaternion);
+    w.sp.scale.set(s,s,1);
+    w.halo.material.uniforms.opacity.value =
+      0.16*(1-(w._vis||0)*0.7) + (focusedWorld===w ? 0.22 : 0);
+  });
+
+  updateCards();
+  renderer.render(scene, camera);
+
+  if(firstFrame){ firstFrame=false; setTimeout(()=>document.body.classList.add('ready'), 300); }
+}
+
+addEventListener('resize', ()=>{
+  resizeScene();
+});
+
+animate();
+requestAnimationFrame(()=>{
+  renderFocusCard(worlds[0]);
+  renderDetail(worlds[0]);
+  AtlasLG.init().catch(error=>console.error('Liquid Glass initialization failed:',error));
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# Xcode / Swift
+.DS_Store
+*.xcuserstate
+xcuserdata/
+DerivedData/
+build/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Xcode workspace/user settings
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# SwiftPM
+.swiftpm/
+.build/
+
+# Secrets (真实模型接入后放这里，别提交 key)
+Secrets.xcconfig
+*.env
