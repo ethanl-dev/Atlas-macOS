@@ -294,8 +294,8 @@ struct PublicProjectView: View {
             LazyVGrid(
                 columns: [
                     GridItem(
-                        .adaptive(minimum: 220, maximum: 220),
-                        spacing: AtlasSpacing.l,
+                        .adaptive(minimum: 220),
+                        spacing: AtlasSpacing.xl,
                         alignment: .top
                     )
                 ],
@@ -309,8 +309,7 @@ struct PublicProjectView: View {
                         PublicCharacterPortrait(
                             seed: character.seed,
                             role: character.role,
-                            name: character.name,
-                            location: character.location
+                            name: character.name
                         )
                         .frame(width: 220, height: 320)
                     }
@@ -551,7 +550,6 @@ private struct PublicCharacterPortrait: View {
     var seed: Int
     var role: String
     var name: String
-    var location: String
 
     var body: some View {
         GeometryReader { proxy in
@@ -583,9 +581,6 @@ private struct PublicCharacterPortrait: View {
                         Text(name)
                             .font(.system(size: 23, weight: .semibold))
                             .foregroundStyle(.white)
-                        Label(location, systemImage: "mappin")
-                            .font(AtlasFont.caption)
-                            .foregroundStyle(Color.white.opacity(0.72))
                     }
                     .padding(AtlasSpacing.l)
                     .shadow(color: .black.opacity(0.75), radius: 8, y: 2)
