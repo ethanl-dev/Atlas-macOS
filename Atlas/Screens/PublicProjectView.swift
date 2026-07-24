@@ -182,10 +182,10 @@ struct PublicProjectView: View {
                         .resizable()
                         .scaledToFill()
                         .frame(width: proxy.size.width, height: proxy.size.height)
-                        .scaleEffect(1.06)
-                        .blur(radius: 16)
+                        .scaleEffect(1.035)
+                        .blur(radius: 7)
 
-                    Color.black.opacity(0.18)
+                    Color.black.opacity(0.22)
 
                     AtlasCanvasBackground()
                         .opacity(0.34)
@@ -373,7 +373,7 @@ struct PublicProjectView: View {
         }
         .padding(AtlasSpacing.l)
         .frame(maxWidth: .infinity, minHeight: 160, alignment: .topLeading)
-        .atlasP1Glass(
+        .atlasP1ContentGlass(
             RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
         )
     }
@@ -449,10 +449,10 @@ private struct PublicWorldArtwork: View {
                             LinearGradient(
                                 colors: [
                                     .clear,
-                                    Color(red: 0.58, green: 0.72, blue: 0.61)
-                                        .opacity(0.30 - Double(index) * 0.025),
-                                    Color(red: 0.60, green: 0.42, blue: 0.55)
-                                        .opacity(0.25 - Double(index) * 0.021),
+                                    Color.black
+                                        .opacity(0.42 - Double(index) * 0.036),
+                                    Color.black
+                                        .opacity(0.28 - Double(index) * 0.024),
                                     .clear
                                 ],
                                 startPoint: .leading,
@@ -499,7 +499,7 @@ private struct MiniWorldStrip: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(AtlasSpacing.m)
-                    .atlasP1Glass(
+                    .atlasP1ContentGlass(
                         RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous),
                         interactive: true
                     )
