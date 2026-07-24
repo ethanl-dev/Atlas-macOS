@@ -185,7 +185,7 @@ struct PublicProjectView: View {
                         .scaleEffect(1.06)
                         .blur(radius: 16)
 
-                    Color.black.opacity(0.12)
+                    Color.black.opacity(0.18)
 
                     AtlasCanvasBackground()
                         .opacity(0.34)
@@ -373,7 +373,7 @@ struct PublicProjectView: View {
         }
         .padding(AtlasSpacing.l)
         .frame(maxWidth: .infinity, minHeight: 160, alignment: .topLeading)
-        .atlasWhiteLiquidGlass(
+        .atlasP1Glass(
             RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
         )
     }
@@ -441,6 +441,37 @@ private struct PublicWorldArtwork: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
+
+            VStack(spacing: 9) {
+                ForEach(0..<9, id: \.self) { index in
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    .clear,
+                                    Color(red: 0.58, green: 0.72, blue: 0.61)
+                                        .opacity(0.30 - Double(index) * 0.025),
+                                    Color(red: 0.60, green: 0.42, blue: 0.55)
+                                        .opacity(0.25 - Double(index) * 0.021),
+                                    .clear
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(height: 0.7)
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.bottom, 16)
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .mask(
+                LinearGradient(
+                    colors: [.clear, .white],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
         }
         .clipped()
     }
@@ -468,7 +499,7 @@ private struct MiniWorldStrip: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(AtlasSpacing.m)
-                    .atlasWhiteLiquidGlass(
+                    .atlasP1Glass(
                         RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous),
                         interactive: true
                     )
