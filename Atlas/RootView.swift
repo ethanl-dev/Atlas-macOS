@@ -107,18 +107,20 @@ struct RootView: View {
                 }
                 .animation(.snappy(duration: 0.24), value: model.toast)
 
-            VStack {
-                Spacer()
-                HStack(alignment: .bottom) {
-                    ProfileBrandDock(model: model)
+            if model.destination != .canvas {
+                VStack {
                     Spacer()
-                    ProjectQuickMenu(model: model)
+                    HStack(alignment: .bottom) {
+                        ProfileBrandDock(model: model)
+                        Spacer()
+                        ProjectQuickMenu(model: model)
+                    }
                 }
+                .padding(.leading, 24)
+                .padding(.top, 24)
+                .padding(.bottom, 24)
+                .padding(.trailing, 12)
             }
-            .padding(.leading, 24)
-            .padding(.top, 24)
-            .padding(.bottom, 24)
-            .padding(.trailing, 12)
         }
     }
 
@@ -134,7 +136,15 @@ struct RootView: View {
         case .overview:
             PublicProjectView(model: model)
         case .canvas:
-            WorldCanvasPlaceholderView(model: model)
+            WorldBuilderCanvas(
+                model: model,
+                mode: "manage",
+                worldName: model.activeWorld.name,
+                canEdit: model.activeRole == .owner && model.canWriteActiveWorld,
+                onExit: { model.destination = .publicPreview }
+            )
+            .ignoresSafeArea()
+            .id(model.activeWorldID)
         case .wiki:
             WorldWikiView(model: model)
         case .assets:

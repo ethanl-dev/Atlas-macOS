@@ -142,30 +142,3 @@ struct ProjectQuickMenu: View {
         }
     }
 }
-
-struct WorldCanvasPlaceholderView: View {
-    @ObservedObject var model: AtlasAppModel
-
-    var body: some View {
-        ZStack {
-            AtlasCanvasBackground()
-            VStack(spacing: AtlasSpacing.m) {
-                Image(systemName: "rectangle.dashed")
-                    .font(.system(size: 34, weight: .light))
-                    .foregroundStyle(AtlasColor.textTertiary)
-                Text("WORLD CANVAS")
-                    .font(AtlasFont.mono)
-                    .foregroundStyle(AtlasColor.textSecondary)
-                Text("地图与世界画布暂时留白")
-                    .font(AtlasFont.caption)
-                    .foregroundStyle(AtlasColor.textTertiary)
-                Button {
-                    model.destination = .publicPreview
-                } label: {
-                    AtlasButtonLabel(title: "返回企划首页", systemImage: "arrow.left")
-                }
-                .buttonStyle(.atlas(.glass))
-            }
-        }
-    }
-}
