@@ -19,12 +19,38 @@ struct PublicProjectView: View {
             PublicWorldArtwork()
                 .frame(height: 500)
 
+            heroBottomFade
+                .frame(height: 500)
+                .allowsHitTesting(false)
+
             heroDock
                 .padding(.horizontal, 32)
                 .padding(.bottom, 22)
         }
         .frame(height: 500)
         .clipped()
+    }
+
+    /// 渐变以可见 Hero 的底边（即下方内容区顶部）为终点，
+    /// 不跟随 scaledToFill 后超出裁剪区的图片尺寸。
+    private var heroBottomFade: some View {
+        Color.black.opacity(0.90)
+            .mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.00),
+                        .init(color: .clear, location: 0.40),
+                        .init(color: .white.opacity(0.04), location: 0.45),
+                        .init(color: .white.opacity(0.16), location: 0.52),
+                        .init(color: .white.opacity(0.36), location: 0.62),
+                        .init(color: .white.opacity(0.62), location: 0.74),
+                        .init(color: .white.opacity(0.84), location: 0.87),
+                        .init(color: .white, location: 1.00)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
     }
 
     private var heroDock: some View {
@@ -438,24 +464,6 @@ private struct PublicWorldArtwork: View {
             Image("PixabayBanner")
                 .resizable()
                 .scaledToFill()
-            Color.black.opacity(0.90)
-                .mask {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0.00),
-                            .init(color: .clear, location: 0.40),
-                            .init(color: .white.opacity(0.04), location: 0.45),
-                            .init(color: .white.opacity(0.16), location: 0.52),
-                            .init(color: .white.opacity(0.36), location: 0.62),
-                            .init(color: .white.opacity(0.62), location: 0.74),
-                            .init(color: .white.opacity(0.84), location: 0.87),
-                            .init(color: .white, location: 1.00)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                }
-
             VStack(spacing: 9) {
                 ForEach(0..<9, id: \.self) { index in
                     Rectangle()
