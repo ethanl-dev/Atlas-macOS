@@ -22,23 +22,6 @@ struct PublicProjectView: View {
             heroDock
                 .padding(.horizontal, 32)
                 .padding(.bottom, 22)
-
-            Button {
-                withAnimation(.snappy(duration: 0.32)) {
-                    model.destination = .discover
-                }
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 38, height: 38)
-                    .atlasP1Glass(Circle(), interactive: true)
-            }
-            .buttonStyle(.plain)
-            .help("返回星图")
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(.leading, 82)
-            .padding(.top, 18)
         }
         .frame(height: 500)
         .clipped()
@@ -390,26 +373,9 @@ struct PublicProjectView: View {
         }
         .padding(AtlasSpacing.l)
         .frame(maxWidth: .infinity, minHeight: 160, alignment: .topLeading)
-        .background(
-            .ultraThinMaterial,
-            in: RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
-        )
-        .background(
-            Color.white.opacity(0.15),
-            in: RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
-        )
-        .overlay {
+        .atlasWhiteLiquidGlass(
             RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [.white.opacity(0.72), .white.opacity(0.18)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
-        }
-        .shadow(color: .black.opacity(0.18), radius: 18, y: 10)
+        )
     }
 
     private func pulseRow(_ label: String, detail: String) -> some View {
@@ -502,8 +468,10 @@ private struct MiniWorldStrip: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(AtlasSpacing.m)
-                    .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: AtlasRadius.card))
-                    .overlay(RoundedRectangle(cornerRadius: AtlasRadius.card).stroke(AtlasColor.borderSubtle))
+                    .atlasWhiteLiquidGlass(
+                        RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous),
+                        interactive: true
+                    )
                 }
                 .buttonStyle(.plain)
             }

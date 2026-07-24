@@ -109,6 +109,51 @@ extension View {
         }
         .shadow(color: tint.opacity(0.13), radius: 22, y: 8)
     }
+
+    /// 覆盖在图片上的白色液态玻璃：使用 clear 折射而不是 regular 磨砂。
+    func atlasWhiteLiquidGlass<S: Shape>(
+        _ shape: S = RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous),
+        interactive: Bool = false
+    ) -> some View {
+        background(
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.13),
+                    Color.white.opacity(0.045),
+                    Color.white.opacity(0.075)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: shape
+        )
+        .atlasGlass(shape, clear: true, interactive: interactive)
+        .overlay {
+            shape.stroke(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.72),
+                        Color.white.opacity(0.16),
+                        Color.white.opacity(0.38)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
+        }
+        .overlay(alignment: .top) {
+            shape.stroke(Color.white.opacity(0.46), lineWidth: 0.7)
+                .mask(
+                    LinearGradient(
+                        colors: [.white, .clear],
+                        startPoint: .topLeading,
+                        endPoint: .center
+                    )
+                )
+        }
+        .shadow(color: .black.opacity(0.26), radius: 18, y: 9)
+    }
 }
 
 // MARK: - 玻璃容器
