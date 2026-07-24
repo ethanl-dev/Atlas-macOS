@@ -19,17 +19,12 @@ struct PublicProjectView: View {
             PublicWorldArtwork()
                 .frame(height: 500)
 
-            LinearGradient(
-                colors: [.clear, AtlasColor.canvas.opacity(0.42)],
-                startPoint: .center,
-                endPoint: .bottom
-            )
-
             heroDock
                 .padding(.horizontal, 32)
                 .padding(.bottom, 22)
         }
-        .frame(minHeight: 500)
+        .frame(height: 500)
+        .clipped()
     }
 
     private var heroDock: some View {
@@ -181,26 +176,25 @@ struct PublicProjectView: View {
                 .frame(width: 320)
         }
         .background {
-            ZStack {
-                Image("PixabayBanner")
-                    .resizable()
-                    .scaledToFill()
-                    .blur(radius: 52)
-                    .scaleEffect(1.18)
-                    .opacity(0.88)
-                Color.black.opacity(0.34)
-                LinearGradient(
-                    colors: [
-                        Color.black.opacity(0.10),
-                        AtlasColor.auroraViolet.opacity(0.10),
-                        AtlasColor.auroraMint.opacity(0.08)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+            GeometryReader { proxy in
+                ZStack {
+                    Image("PixabayBanner")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .scaleEffect(1.10)
+                        .blur(radius: 34)
+
+                    Color.black.opacity(0.30)
+
+                    AtlasCanvasBackground()
+                        .opacity(0.58)
+                }
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .clipped()
             }
-            .clipped()
         }
+        .clipped()
     }
 
     @ViewBuilder
