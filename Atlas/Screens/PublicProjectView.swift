@@ -348,7 +348,8 @@ struct PublicProjectView: View {
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
+                    .clipped()
                 }
             }
         }
@@ -675,6 +676,7 @@ private struct AtlasAssetPreview: Identifiable {
     enum Kind: Equatable {
         case titledMedia
         case pureMedia
+        case portraitMedia
         case text
         case untitledVideo
     }
@@ -693,7 +695,8 @@ private struct AtlasAssetPreview: Identifiable {
         AtlasAssetPreview(id: 1, title: "第七码头的灯", author: "白雀", type: "插画", seed: 1, symbol: "light.beacon.max", featured: true, kind: .titledMedia, body: "灯火沿着退潮后的石阶依次亮起，像一封迟到许多年的回信。"),
         AtlasAssetPreview(id: 2, title: "雾中信使", author: "秋庭", type: "纯图", seed: 2, symbol: "figure.walk", featured: false, kind: .pureMedia, body: ""),
         AtlasAssetPreview(id: 3, title: "潮汐以前 · 序章", author: "林雾", type: "短篇", seed: 3, symbol: "doc.text", featured: false, kind: .text, body: "潮汐尚未来临以前，白塔每天在同一时刻熄灯。没有人知道守塔人去了哪里，只剩下写到一半的航海日志。第一页反复提到一座不存在于星图上的岛，以及一封尚未寄出的信。"),
-        AtlasAssetPreview(id: 4, title: "远岸以北", author: "岛屿", type: "无标题影像", seed: 4, symbol: "play.fill", featured: false, kind: .untitledVideo, body: "")
+        AtlasAssetPreview(id: 4, title: "远岸以北", author: "岛屿", type: "无标题影像", seed: 4, symbol: "play.fill", featured: false, kind: .untitledVideo, body: ""),
+        AtlasAssetPreview(id: 5, title: "潮生处", author: "迟屿", type: "竖幅纯图", seed: 5, symbol: "photo", featured: false, kind: .portraitMedia, body: "")
     ]
 }
 
@@ -706,6 +709,7 @@ private struct LibraryWorkCard: View {
         switch work.kind {
         case .titledMedia: work.featured ? 300 : 236
         case .pureMedia: 210
+        case .portraitMedia: 340
         case .untitledVideo: 174
         case .text: 250
         }
@@ -740,6 +744,7 @@ private struct LibraryWorkCard: View {
                     )
                 } else {
                     PixabayLandscape(seed: work.seed + 2)
+                        .frame(maxWidth: .infinity)
                         .frame(height: mediaHeight)
                         .overlay {
                             if work.kind == .titledMedia {
@@ -783,6 +788,17 @@ private struct LibraryWorkCard: View {
                                     .atlasP1Glass(Circle())
                             }
                         }
+                        .overlay(alignment: .bottomLeading) {
+                            if work.kind != .titledMedia {
+                                Text("@\(work.author)")
+                                    .font(AtlasFont.caption)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 7)
+                                    .shadow(color: .black, radius: 7, y: 2)
+                                    .padding(AtlasSpacing.s)
+                            }
+                        }
                         .clipShape(RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous)
@@ -790,12 +806,16 @@ private struct LibraryWorkCard: View {
                         }
                 }
             }
+            .frame(minWidth: 0, maxWidth: .infinity)
+            .clipped()
             .contentShape(RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous))
-            .scaleEffect(hovering ? 1.018 : 1)
+            .scaleEffect(hovering ? 1.01 : 1)
             .offset(y: hovering ? -5 : 0)
             .shadow(color: .black.opacity(hovering ? 0.46 : 0.20), radius: hovering ? 24 : 12, y: hovering ? 13 : 6)
         }
         .buttonStyle(.plain)
+        .frame(minWidth: 0, maxWidth: .infinity)
+        .zIndex(hovering ? 2 : 0)
         .onHover { hovering = $0 }
         .animation(.spring(response: 0.38, dampingFraction: 0.80), value: hovering)
     }
