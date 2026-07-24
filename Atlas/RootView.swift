@@ -72,6 +72,7 @@ struct RootView: View {
             destinationView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(AtlasCanvasBackground())
+                .zIndex(0)
                 .overlay(alignment: .top) {
                     if let toast = model.toast {
                         ToastView(message: toast)
@@ -94,6 +95,7 @@ struct RootView: View {
                 .padding(.top, 24)
                 .padding(.bottom, 24)
                 .padding(.trailing, 12)
+                .zIndex(100)
             }
         }
     }
