@@ -49,23 +49,26 @@ struct PublicProjectView: View {
     }
 
     private var hero: some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack {
             PublicWorldArtwork()
                 .frame(height: 500)
+                .allowsHitTesting(false)
                 .zIndex(0)
 
             heroBottomFade
                 .frame(height: 500)
                 .allowsHitTesting(false)
                 .zIndex(1)
-
-            heroDock
-                .padding(.horizontal, 32)
-                .padding(.bottom, 22)
-                .zIndex(10)
         }
         .frame(height: 500)
         .clipped()
+        .overlay(alignment: .bottomLeading) {
+            heroDock
+                .padding(.horizontal, 32)
+                .padding(.bottom, 22)
+                .contentShape(Rectangle())
+        }
+        .zIndex(20)
     }
 
     /// 渐变以可见 Hero 的底边（即下方内容区顶部）为终点，
