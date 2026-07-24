@@ -290,29 +290,29 @@ struct PublicProjectView: View {
         VStack(alignment: .leading, spacing: AtlasSpacing.xl) {
             Text("已进入世界的角色")
                 .font(AtlasFont.title)
-            Text("角色不是展示卡，而是拥有位置、目标、关系和事件经历的世界对象。")
-                .font(AtlasFont.body)
-                .foregroundStyle(AtlasColor.textSecondary)
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: AtlasSpacing.l)], spacing: AtlasSpacing.l) {
+            LazyVGrid(
+                columns: [
+                    GridItem(
+                        .adaptive(minimum: 220, maximum: 220),
+                        spacing: AtlasSpacing.l,
+                        alignment: .top
+                    )
+                ],
+                alignment: .leading,
+                spacing: AtlasSpacing.l
+            ) {
                 ForEach(PublicCharacter.samples) { character in
                     Button {
                         model.showToast("已打开 \(character.name) 的角色档案")
                     } label: {
-                        VStack(alignment: .leading, spacing: AtlasSpacing.m) {
-                            CharacterPortrait(seed: character.seed, initials: character.initials)
-                                .frame(height: 210)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(character.role)
-                                    .font(AtlasFont.monoSmall)
-                                    .foregroundStyle(AtlasColor.textTertiary)
-                                Text(character.name)
-                                    .font(AtlasFont.heading)
-                                Label(character.location, systemImage: "mappin")
-                                    .font(AtlasFont.caption)
-                                    .foregroundStyle(AtlasColor.textSecondary)
-                            }
-                        }
+                        PublicCharacterPortrait(
+                            seed: character.seed,
+                            role: character.role,
+                            name: character.name,
+                            location: character.location
+                        )
+                        .frame(width: 220, height: 320)
                     }
                     .buttonStyle(.plain)
                 }
@@ -537,15 +537,68 @@ private struct PublicCharacter: Identifiable {
     let name: String
     let role: String
     let location: String
-    let initials: String
     let seed: Int
 
     static let samples = [
-        PublicCharacter(id: 1, name: "岑", role: "档案修复师", location: "雾港", initials: "C", seed: 1),
-        PublicCharacter(id: 2, name: "伊莱", role: "领航员", location: "白塔", initials: "E", seed: 2),
-        PublicCharacter(id: 3, name: "白昼", role: "外来调查者", location: "第七码头", initials: "B", seed: 3),
-        PublicCharacter(id: 4, name: "阿芙拉", role: "雾海信使", location: "北岸", initials: "A", seed: 4)
+        PublicCharacter(id: 1, name: "岑", role: "档案修复师", location: "雾港", seed: 1),
+        PublicCharacter(id: 2, name: "伊莱", role: "领航员", location: "白塔", seed: 2),
+        PublicCharacter(id: 3, name: "白昼", role: "外来调查者", location: "第七码头", seed: 3),
+        PublicCharacter(id: 4, name: "阿芙拉", role: "雾海信使", location: "北岸", seed: 4)
     ]
+}
+
+private struct PublicCharacterPortrait: View {
+    var seed: Int
+    var role: String
+    var name: String
+    var location: String
+
+    var body: some View {
+        GeometryReader { proxy in
+            PixabayLandscape(seed: seed)
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .overlay {
+                    Color.black.opacity(0.90)
+                        .mask {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .clear, location: 0.00),
+                                    .init(color: .clear, location: 0.42),
+                                    .init(color: .white.opacity(0.08), location: 0.50),
+                                    .init(color: .white.opacity(0.28), location: 0.62),
+                                    .init(color: .white.opacity(0.58), location: 0.76),
+                                    .init(color: .white.opacity(0.84), location: 0.90),
+                                    .init(color: .white, location: 1.00)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(role)
+                            .font(AtlasFont.monoSmall)
+                            .foregroundStyle(Color.white.opacity(0.68))
+                        Text(name)
+                            .font(.system(size: 23, weight: .semibold))
+                            .foregroundStyle(.white)
+                        Label(location, systemImage: "mappin")
+                            .font(AtlasFont.caption)
+                            .foregroundStyle(Color.white.opacity(0.72))
+                    }
+                    .padding(AtlasSpacing.l)
+                    .shadow(color: .black.opacity(0.75), radius: 8, y: 2)
+                }
+                .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous)
+                .stroke(Color.white.opacity(0.20), lineWidth: 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous))
+    }
 }
 
 struct CharacterPortrait: View {
@@ -561,8 +614,8 @@ struct CharacterPortrait: View {
                     .padding(AtlasSpacing.m)
                     .shadow(color: .black.opacity(0.8), radius: 8)
             }
-        .clipShape(RoundedRectangle(cornerRadius: AtlasRadius.card))
-        .overlay(RoundedRectangle(cornerRadius: AtlasRadius.card).stroke(AtlasColor.borderSubtle))
+            .clipShape(RoundedRectangle(cornerRadius: AtlasRadius.card))
+            .overlay(RoundedRectangle(cornerRadius: AtlasRadius.card).stroke(AtlasColor.borderSubtle))
     }
 }
 
