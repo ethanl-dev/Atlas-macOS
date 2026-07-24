@@ -1,6 +1,6 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
-<title>Atlas · 地图</title><style>
+<title>Atlas · 地图底盘</title><style>
 
 :root {
   --paper:#fcfbf8; --paper-2:#ecebe4; --paper-3:#e2e0da;
@@ -51652,6 +51652,12 @@ function MapEditor({ onExit, onSave, initialMap }) {
                 if (terrainCacheRef.current)
                     ctx.drawImage(terrainCacheRef.current, 0, 0, W, H);
                 ctx.globalAlpha = 1;
+                if (coastRef.current.length) {
+                    ctx.strokeStyle = "rgba(255,255,255,.72)";
+                    ctx.lineWidth = 1.5 / c.zoom;
+                    ctx.lineJoin = "round";
+                    coastRef.current.forEach(path => { ctx.beginPath(); path.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); ctx.stroke(); });
+                }
                 const hoveredConnectionPoint = toolRef.current === "line" && Number.isFinite(pointer.current.x) && Number.isFinite(pointer.current.y) ? pointAt(mapPoint(pointer.current.x, pointer.current.y)) : undefined;
                 annotationsRef.current.forEach(a => {
                     if (a.wikiOnly)
@@ -51947,7 +51953,7 @@ function MapEditor({ onExit, onSave, initialMap }) {
         setRevision(v => v + 1);
     }
     function exportPNG() { const a = document.createElement("a"); a.download = "atlas-map.png"; a.href = canvasRef.current.toDataURL("image/png"); a.click(); }
-    function saveAndView(roughness) { const data = snapshot(), generated = generatedCoasts(data.height, roughness); data.coasts = generated.paths; data.height = fitHeightToCoasts(data.height, data.coasts); setSaved(true); setSaveDialog(false); onSave({ ...data, worldKm, coastRoughness: roughness, gridWidth: GX, gridHeight: GY, coastHoles: generated.holes, categories, relationCategories }); }
+    function saveAndView(roughness) { const data = snapshot(), generated = generatedCoasts(data.height, roughness); data.coasts = generated.paths; data.height = fitHeightToCoasts(data.height, data.coasts); coastRef.current = generated.paths.map(path => path.map(p => ({ ...p }))); heightRef.current = Float32Array.from(data.height); rebuildTerrainCache(2); setSaved(true); setSaveDialog(false); setRevision(v => v + 1); onSave({ ...data, worldKm, coastRoughness: roughness, gridWidth: GX, gridHeight: GY, coastHoles: generated.holes, categories, relationCategories }); }
     const toolGroups = [
         { label: "导航", items: [{ id: "pan", name: "移动" }] },
         { label: "地形", items: [{ id: "raise", name: "抬升" }, { id: "lower", name: "下压" }, { id: "seaLevel", name: "海平面" }, { id: "smooth", name: "平滑" }, { id: "flatten", name: "压平" }, { id: "river", name: "河流绘制" }] },

@@ -6,16 +6,12 @@ struct RootView: View {
     var body: some View {
         Group {
             if model.creatingWorld {
-                // 创建世界 = 直接进入空白地图编辑器（不再有引导仪式流）
-                WorldMapCanvasView(
+                // 创建世界 = 进入 World Canvas（组件库 + 自由画布 + 可编辑详情卡），地图只是底盘之一
+                WorldBuilderCanvas(
+                    model: model,
                     mode: "create",
+                    worldName: "未命名世界",
                     onExit: {
-                        withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = false }
-                    },
-                    onSave: { _ in
-                        model.creationCompleted = true
-                        model.accessMode = .manage
-                        model.destination = .canvas
                         withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = false }
                     }
                 )
@@ -65,12 +61,14 @@ struct RootView: View {
         case .overview:
             ProjectOverviewView(model: model)
         case .canvas:
-            WorldMapCanvasView(
+            WorldBuilderCanvas(
+                model: model,
                 mode: "manage",
-                onExit: { model.destination = .overview },
-                onSave: { locations in model.showToast("地图已保存 · \(locations) 个地点") }
+                worldName: model.activeWorld.name,
+                onExit: { model.destination = .overview }
             )
             .ignoresSafeArea()
+            .id(model.activeWorldID)
         case .wiki:
             WorldWikiView(model: model)
         case .assets:
