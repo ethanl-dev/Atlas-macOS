@@ -294,7 +294,7 @@ struct PublicProjectView: View {
             LazyVGrid(
                 columns: [
                     GridItem(
-                        .adaptive(minimum: 220),
+                        .adaptive(minimum: 236),
                         spacing: AtlasSpacing.xl,
                         alignment: .top
                     )
@@ -311,7 +311,7 @@ struct PublicProjectView: View {
                             role: character.role,
                             name: character.name
                         )
-                        .frame(width: 220, height: 320)
+                        .frame(width: 236, height: 320)
                     }
                     .buttonStyle(.plain)
                 }
@@ -550,6 +550,7 @@ private struct PublicCharacterPortrait: View {
     var seed: Int
     var role: String
     var name: String
+    @State private var hovering = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -590,9 +591,24 @@ private struct PublicCharacterPortrait: View {
         .clipShape(RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous)
-                .stroke(Color.white.opacity(0.20), lineWidth: 1)
+                .stroke(
+                    Color.white.opacity(hovering ? 0.42 : 0.20),
+                    lineWidth: hovering ? 1.2 : 1
+                )
         }
+        .shadow(
+            color: .black.opacity(hovering ? 0.46 : 0.22),
+            radius: hovering ? 24 : 12,
+            y: hovering ? 14 : 7
+        )
+        .scaleEffect(hovering ? 1.025 : 1)
+        .offset(y: hovering ? -6 : 0)
         .contentShape(RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous))
+        .onHover { hovering = $0 }
+        .animation(
+            .spring(response: 0.38, dampingFraction: 0.78),
+            value: hovering
+        )
     }
 }
 
