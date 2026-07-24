@@ -349,7 +349,6 @@ struct PublicProjectView: View {
                         }
                     }
                     .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
-                    .clipped()
                 }
             }
         }
@@ -705,17 +704,19 @@ private struct LibraryWorkCard: View {
     let action: () -> Void
     @State private var hovering = false
 
-    private var mediaHeight: CGFloat {
+    private var mediaAspectRatio: CGFloat {
         switch work.kind {
-        case .titledMedia: work.featured ? 300 : 236
-        case .pureMedia: 210
-        case .portraitMedia: 340
-        case .untitledVideo: 174
-        case .text: 250
+        case .titledMedia: 1.16
+        case .pureMedia: 1.55
+        case .portraitMedia: 0.72
+        case .untitledVideo: 16 / 9
+        case .text: 1
         }
     }
 
     var body: some View {
+        let cardShape = RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous)
+
         Button(action: action) {
             Group {
                 if work.kind == .text {
@@ -730,22 +731,22 @@ private struct LibraryWorkCard: View {
                             .font(AtlasFont.body)
                             .foregroundStyle(AtlasColor.textSecondary)
                             .lineSpacing(6)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                            .clipped()
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
                         Text(work.author)
                             .font(AtlasFont.caption)
                             .foregroundStyle(AtlasColor.textTertiary)
                     }
                     .padding(AtlasSpacing.l)
-                    .frame(maxWidth: .infinity, minHeight: mediaHeight, maxHeight: mediaHeight, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, minHeight: 260, alignment: .topLeading)
                     .atlasFloatingGlass(
-                        RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous),
+                        cardShape,
                         interactive: true
                     )
                 } else {
                     PixabayLandscape(seed: work.seed + 2)
                         .frame(maxWidth: .infinity)
-                        .frame(height: mediaHeight)
+                        .aspectRatio(mediaAspectRatio, contentMode: .fit)
                         .overlay {
                             if work.kind == .titledMedia {
                                 Color.black.opacity(0.90)
@@ -772,6 +773,7 @@ private struct LibraryWorkCard: View {
                                     Text(work.title)
                                         .font(AtlasFont.heading)
                                         .foregroundStyle(.white)
+                                        .fixedSize(horizontal: false, vertical: true)
                                     Text(work.author)
                                         .font(AtlasFont.caption)
                                         .foregroundStyle(Color.white.opacity(0.72))
@@ -799,17 +801,16 @@ private struct LibraryWorkCard: View {
                                     .padding(AtlasSpacing.s)
                             }
                         }
-                        .clipShape(RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous)
-                                .stroke(Color.white.opacity(hovering ? 0.34 : 0.16), lineWidth: 1)
-                        }
                 }
             }
             .frame(minWidth: 0, maxWidth: .infinity)
-            .clipped()
-            .contentShape(RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous))
-            .scaleEffect(hovering ? 1.01 : 1)
+            .clipShape(cardShape)
+            .overlay {
+                cardShape
+                    .stroke(Color.white.opacity(hovering ? 0.34 : 0.16), lineWidth: 1)
+            }
+            .contentShape(cardShape)
+            .scaleEffect(hovering ? 1.006 : 1)
             .offset(y: hovering ? -5 : 0)
             .shadow(color: .black.opacity(hovering ? 0.46 : 0.20), radius: hovering ? 24 : 12, y: hovering ? 13 : 6)
         }
