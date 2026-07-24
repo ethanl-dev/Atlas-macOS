@@ -3,15 +3,25 @@ import SwiftUI
 struct PublicProjectView: View {
     @ObservedObject var model: AtlasAppModel
     @State private var tab = PublicTab.detail
+    @State private var selectedWork: AtlasAssetPreview?
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                hero
-                pageLayout
+        ZStack {
+            ScrollView {
+                VStack(spacing: 0) {
+                    hero
+                    pageLayout
+                }
+            }
+            .background(AtlasCanvasBackground())
+
+            if let selectedWork {
+                workLightbox(selectedWork)
+                    .zIndex(200)
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
         }
-        .background(AtlasCanvasBackground())
+        .animation(.spring(response: 0.38, dampingFraction: 0.84), value: selectedWork?.id)
     }
 
     private var hero: some View {
@@ -325,15 +335,17 @@ struct PublicProjectView: View {
             Text("世界留下的作品")
                 .font(AtlasFont.title)
 
-            HStack(alignment: .top, spacing: AtlasSpacing.l) {
-                ForEach(0..<2, id: \.self) { column in
+            HStack(alignment: .top, spacing: AtlasSpacing.xl) {
+                ForEach(0..<3, id: \.self) { column in
                     LazyVStack(alignment: .leading, spacing: AtlasSpacing.l) {
                         ForEach(
                             Array(AtlasAssetPreview.samples.enumerated())
-                                .filter { $0.offset % 2 == column },
+                                .filter { $0.offset % 3 == column },
                             id: \.element.id
                         ) { _, work in
-                            workCard(work)
+                            LibraryWorkCard(work: work) {
+                                selectedWork = work
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -343,22 +355,51 @@ struct PublicProjectView: View {
         .padding(AtlasSpacing.xxl)
     }
 
-    private func workCard(_ work: AtlasAssetPreview) -> some View {
-        Button {
-            model.showToast("已打开作品「\(work.title)」")
-        } label: {
-            VStack(alignment: .leading, spacing: AtlasSpacing.s) {
-                AssetArtworkPreview(seed: work.seed, symbol: work.symbol)
-                    .frame(height: work.featured ? 260 : 166)
-                Text(work.title)
-                    .font(AtlasFont.heading)
-                Text("\(work.author) · \(work.type)")
-                    .font(AtlasFont.caption)
-                    .foregroundStyle(AtlasColor.textTertiary)
+    private func workLightbox(_ work: AtlasAssetPreview) -> some View {
+        ZStack {
+            Color.black.opacity(0.82)
+                .ignoresSafeArea()
+                .onTapGesture { selectedWork = nil }
+
+            VStack(spacing: AtlasSpacing.l) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(work.title)
+                            .font(AtlasFont.title)
+                        Text("\(work.author) · \(work.type)")
+                            .font(AtlasFont.caption)
+                            .foregroundStyle(AtlasColor.textSecondary)
+                    }
+                    Spacer()
+                    Button {
+                        selectedWork = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                            .frame(width: 42, height: 42)
+                            .atlasP1Glass(Circle(), interactive: true)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if work.kind == .text {
+                    ScrollView {
+                        Text(work.body)
+                            .font(.system(size: 17))
+                            .lineSpacing(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                } else {
+                    AssetArtworkPreview(seed: work.seed, symbol: work.symbol)
+                        .aspectRatio(16 / 10, contentMode: .fit)
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(AtlasSpacing.xl)
+            .frame(maxWidth: 920, maxHeight: 680)
+            .atlasFloatingGlass(
+                RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
+            )
+            .padding(48)
         }
-        .buttonStyle(.plain)
     }
 
     private func heroMetric(
@@ -631,6 +672,13 @@ struct CharacterPortrait: View {
 }
 
 private struct AtlasAssetPreview: Identifiable {
+    enum Kind: Equatable {
+        case titledMedia
+        case pureMedia
+        case text
+        case untitledVideo
+    }
+
     let id: Int
     let title: String
     let author: String
@@ -638,13 +686,119 @@ private struct AtlasAssetPreview: Identifiable {
     let seed: Int
     let symbol: String
     let featured: Bool
+    let kind: Kind
+    let body: String
 
     static let samples = [
-        AtlasAssetPreview(id: 1, title: "第七码头的灯", author: "白雀", type: "插画", seed: 1, symbol: "light.beacon.max", featured: true),
-        AtlasAssetPreview(id: 2, title: "雾中信使", author: "秋庭", type: "插画", seed: 2, symbol: "figure.walk", featured: false),
-        AtlasAssetPreview(id: 3, title: "潮汐以前 · 序章", author: "林雾", type: "短篇", seed: 3, symbol: "doc.text", featured: false),
-        AtlasAssetPreview(id: 4, title: "远岸以北", author: "岛屿", type: "地图", seed: 4, symbol: "map", featured: false)
+        AtlasAssetPreview(id: 1, title: "第七码头的灯", author: "白雀", type: "插画", seed: 1, symbol: "light.beacon.max", featured: true, kind: .titledMedia, body: "灯火沿着退潮后的石阶依次亮起，像一封迟到许多年的回信。"),
+        AtlasAssetPreview(id: 2, title: "雾中信使", author: "秋庭", type: "纯图", seed: 2, symbol: "figure.walk", featured: false, kind: .pureMedia, body: ""),
+        AtlasAssetPreview(id: 3, title: "潮汐以前 · 序章", author: "林雾", type: "短篇", seed: 3, symbol: "doc.text", featured: false, kind: .text, body: "潮汐尚未来临以前，白塔每天在同一时刻熄灯。没有人知道守塔人去了哪里，只剩下写到一半的航海日志。第一页反复提到一座不存在于星图上的岛，以及一封尚未寄出的信。"),
+        AtlasAssetPreview(id: 4, title: "远岸以北", author: "岛屿", type: "无标题影像", seed: 4, symbol: "play.fill", featured: false, kind: .untitledVideo, body: "")
     ]
+}
+
+private struct LibraryWorkCard: View {
+    let work: AtlasAssetPreview
+    let action: () -> Void
+    @State private var hovering = false
+
+    private var mediaHeight: CGFloat {
+        switch work.kind {
+        case .titledMedia: work.featured ? 300 : 236
+        case .pureMedia: 210
+        case .untitledVideo: 174
+        case .text: 250
+        }
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if work.kind == .text {
+                    VStack(alignment: .leading, spacing: AtlasSpacing.m) {
+                        Text(work.title)
+                            .font(.system(size: 25, weight: .semibold))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Rectangle()
+                            .fill(Color.white.opacity(0.18))
+                            .frame(height: 1)
+                        Text(work.body)
+                            .font(AtlasFont.body)
+                            .foregroundStyle(AtlasColor.textSecondary)
+                            .lineSpacing(6)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .clipped()
+                        Text(work.author)
+                            .font(AtlasFont.caption)
+                            .foregroundStyle(AtlasColor.textTertiary)
+                    }
+                    .padding(AtlasSpacing.l)
+                    .frame(maxWidth: .infinity, minHeight: mediaHeight, maxHeight: mediaHeight, alignment: .topLeading)
+                    .atlasFloatingGlass(
+                        RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous),
+                        interactive: true
+                    )
+                } else {
+                    PixabayLandscape(seed: work.seed + 2)
+                        .frame(height: mediaHeight)
+                        .overlay {
+                            if work.kind == .titledMedia {
+                                Color.black.opacity(0.90)
+                                    .mask {
+                                        LinearGradient(
+                                            stops: [
+                                                .init(color: .clear, location: 0.38),
+                                                .init(color: .white.opacity(0.10), location: 0.48),
+                                                .init(color: .white.opacity(0.48), location: 0.72),
+                                                .init(color: .white, location: 1.00)
+                                            ],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    }
+                            }
+                        }
+                        .overlay(alignment: .bottomLeading) {
+                            if work.kind == .titledMedia {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(work.type)
+                                        .font(AtlasFont.monoSmall)
+                                        .foregroundStyle(Color.white.opacity(0.68))
+                                    Text(work.title)
+                                        .font(AtlasFont.heading)
+                                        .foregroundStyle(.white)
+                                    Text(work.author)
+                                        .font(AtlasFont.caption)
+                                        .foregroundStyle(Color.white.opacity(0.72))
+                                }
+                                .padding(AtlasSpacing.l)
+                            }
+                        }
+                        .overlay {
+                            if work.kind == .untitledVideo {
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 22, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 54, height: 54)
+                                    .atlasP1Glass(Circle())
+                            }
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous)
+                                .stroke(Color.white.opacity(hovering ? 0.34 : 0.16), lineWidth: 1)
+                        }
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous))
+            .scaleEffect(hovering ? 1.018 : 1)
+            .offset(y: hovering ? -5 : 0)
+            .shadow(color: .black.opacity(hovering ? 0.46 : 0.20), radius: hovering ? 24 : 12, y: hovering ? 13 : 6)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(.spring(response: 0.38, dampingFraction: 0.80), value: hovering)
+    }
 }
 
 private struct AssetArtworkPreview: View {
