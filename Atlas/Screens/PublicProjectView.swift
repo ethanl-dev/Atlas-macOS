@@ -438,21 +438,23 @@ private struct PublicWorldArtwork: View {
             Image("PixabayBanner")
                 .resizable()
                 .scaledToFill()
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0.00),
-                    .init(color: .clear, location: 0.44),
-                    .init(color: .black.opacity(0.025), location: 0.48),
-                    .init(color: .black.opacity(0.10), location: 0.56),
-                    .init(color: .black.opacity(0.23), location: 0.66),
-                    .init(color: .black.opacity(0.41), location: 0.77),
-                    .init(color: .black.opacity(0.64), location: 0.89),
-                    .init(color: .black.opacity(0.79), location: 0.96),
-                    .init(color: .black.opacity(0.90), location: 1.00)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            Color.black.opacity(0.90)
+                .mask {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0.00),
+                            .init(color: .clear, location: 0.40),
+                            .init(color: .white.opacity(0.04), location: 0.45),
+                            .init(color: .white.opacity(0.16), location: 0.52),
+                            .init(color: .white.opacity(0.36), location: 0.62),
+                            .init(color: .white.opacity(0.62), location: 0.74),
+                            .init(color: .white.opacity(0.84), location: 0.87),
+                            .init(color: .white, location: 1.00)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
 
             VStack(spacing: 9) {
                 ForEach(0..<9, id: \.self) { index in
