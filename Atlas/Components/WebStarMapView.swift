@@ -4,13 +4,18 @@ import WebKit
 struct WebStarMapView: NSViewRepresentable {
     var onOpenWorld: (String) -> Void
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onOpenWorld: onOpenWorld)
-    }
+    private static let bridge = Bridge()
+    private static var cachedWebView: WKWebView?
 
     func makeNSView(context: Context) -> WKWebView {
+        Self.bridge.onOpenWorld = onOpenWorld
+
+        if let cachedWebView = Self.cachedWebView {
+            return cachedWebView
+        }
+
         let configuration = WKWebViewConfiguration()
-        configuration.userContentController.add(context.coordinator, name: "atlasBridge")
+        configuration.userContentController.add(Self.bridge, name: "atlasBridge")
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.setValue(false, forKey: "drawsBackground")
@@ -28,15 +33,12 @@ struct WebStarMapView: NSViewRepresentable {
             )
         }
 
+        Self.cachedWebView = webView
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        context.coordinator.onOpenWorld = onOpenWorld
-    }
-
-    static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "atlasBridge")
+        Self.bridge.onOpenWorld = onOpenWorld
     }
 
     private var resourceURL: URL? {
@@ -50,12 +52,8 @@ struct WebStarMapView: NSViewRepresentable {
         )
     }
 
-    final class Coordinator: NSObject, WKScriptMessageHandler {
-        var onOpenWorld: (String) -> Void
-
-        init(onOpenWorld: @escaping (String) -> Void) {
-            self.onOpenWorld = onOpenWorld
-        }
+    final class Bridge: NSObject, WKScriptMessageHandler {
+        var onOpenWorld: ((String) -> Void)?
 
         func userContentController(
             _ userContentController: WKUserContentController,
@@ -67,7 +65,7 @@ struct WebStarMapView: NSViewRepresentable {
                   let name = payload["name"] as? String else {
                 return
             }
-            onOpenWorld(name)
+            onOpenWorld?(name)
         }
     }
 }

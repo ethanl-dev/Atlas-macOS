@@ -33,10 +33,61 @@ struct WorldBuilderCanvas: View {
     @State private var zoomAnchor: CGFloat?
     @State private var scrollMonitor: Any?
     @State private var keyMonitor: Any?
+    @State private var batchDrafts: [BatchCreateDraft] = []
+    @State private var isParsingIntent = false
+    @State private var isResearchingInspiration = false
+    @State private var inspirationProposal: InspirationResearchProposal?
+    @State private var sessionExpanded = true
+    @State private var assistantCardExpanded = true
+    @State private var sessionEntries: [AgentSessionEntry] = [
+        .init(kind: .system, title: "智能体日志", body: "这里会记录你的指令、解析结果和采纳动作。")
+    ]
+    @State private var showWorldNameEditor = false
+    @State private var worldNameDraft = ""
+    @FocusState private var worldNameEditorFocused: Bool
 
     @StateObject private var organizer = CanvasOrganizer()
     @State private var commandMode: CommandMode = .place
-    private enum CommandMode { case place, organize }
+    private enum CommandMode { case place, research, organize }
+    private struct BatchCreateDraft: Identifiable {
+        let id = UUID()
+        var kind: BuilderKind
+        var name: String
+        var summary: String
+    }
+    private struct AgentSessionEntry: Identifiable {
+        enum Kind {
+            case system, user, parse, research, verify, adopt
+
+            var title: String {
+                switch self {
+                case .system: return "系统"
+                case .user: return "指令"
+                case .parse: return "解析"
+                case .research: return "研究"
+                case .verify: return "核验"
+                case .adopt: return "采纳"
+                }
+            }
+
+            var symbol: String {
+                switch self {
+                case .system: return "sparkles"
+                case .user: return "text.bubble"
+                case .parse: return "wand.and.stars"
+                case .research: return "magnifyingglass"
+                case .verify: return "checkmark.shield"
+                case .adopt: return "checkmark.circle"
+                }
+            }
+        }
+
+        let id = UUID()
+        var kind: Kind
+        var title: String
+        var body: String
+        var createdAt = Date()
+    }
 
     init(
         model: AtlasAppModel,
@@ -53,9 +104,11 @@ struct WorldBuilderCanvas: View {
 
     var body: some View {
         canvasStage
-        .overlay(alignment: .top) { topBar }
-        .overlay(alignment: .trailing) { detailPanel }
-        .overlay(alignment: .bottom) { commandBar }
+        .overlay(alignment: .trailing) { detailPanel.zIndex(20) }
+        .overlay(alignment: .leading) { sessionRail.zIndex(25) }
+        .overlay(alignment: .bottom) { commandBar.zIndex(30) }
+        .overlay(alignment: .top) { topBar.zIndex(60) }
+        .overlay { worldNameEditorOverlay.zIndex(90) }
         .overlay { mapEditorOverlay }
         .background(Color(red: 0.035, green: 0.035, blue: 0.043))
     }
@@ -153,8 +206,7 @@ struct WorldBuilderCanvas: View {
             .onAppear {
                 viewSize = proxy.size
                 if !didCenter {
-                    pan = CGSize(width: proxy.size.width / 2 - 600 * scale,
-                                 height: proxy.size.height / 2 - 400 * scale)
+                    centerCanvas(in: proxy.size)
                     didCenter = true
                 }
                 startScrollMonitor()
@@ -331,6 +383,57 @@ struct WorldBuilderCanvas: View {
     // MARK: - 顶栏
 
     private var topBar: some View {
+        HStack(spacing: 0) {
+            topBarTitleGroup
+                .frame(width: 360, alignment: .leading)
+
+            Spacer(minLength: AtlasSpacing.l)
+
+            projectionSwitch
+
+            Spacer(minLength: AtlasSpacing.l)
+
+            topBarActions
+                .frame(width: 360, alignment: .trailing)
+        }
+        .padding(.vertical, AtlasSpacing.m)
+        .padding(.trailing, AtlasSpacing.m)
+        // macOS 交通灯（红黄绿）在 .hiddenTitleBar 下仍浮于左上角，给顶栏左侧留出安全区。
+        .padding(.leading, Self.trafficLightInset)
+        .frame(height: 76)
+        .frame(maxWidth: .infinity)
+        .background {
+            topBarGlassShape
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.080),
+                            Color.white.opacity(0.030),
+                            Color.black.opacity(0.030)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .background(.ultraThinMaterial, in: topBarGlassShape)
+                .overlay(topBarGlassShape.stroke(Color.white.opacity(0.24), lineWidth: 1))
+                .overlay(alignment: .top) {
+                    topBarGlassShape
+                        .stroke(Color.white.opacity(0.58), lineWidth: 0.8)
+                        .mask(LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .center))
+                }
+                .overlay(alignment: .bottom) {
+                    topBarGlassShape
+                        .stroke(Color.black.opacity(0.20), lineWidth: 0.8)
+                        .mask(LinearGradient(colors: [.clear, .white], startPoint: .center, endPoint: .bottom))
+                }
+                .shadow(color: .black.opacity(0.42), radius: 26, y: 14)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+    }
+
+    private var topBarTitleGroup: some View {
         HStack(spacing: AtlasSpacing.m) {
             Button { onExit() } label: {
                 Image(systemName: "chevron.left").frame(width: 24, height: 24)
@@ -340,29 +443,37 @@ struct WorldBuilderCanvas: View {
             .atlasP1Glass(Circle(), interactive: true)
 
             VStack(alignment: .leading, spacing: 1) {
-                if canEdit {
-                    TextField("未命名世界", text: $store.worldName)
-                        .textFieldStyle(.plain)
+                HStack(alignment: .firstTextBaseline, spacing: AtlasSpacing.s) {
+                    Text(store.worldName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未命名世界" : store.worldName)
                         .font(AtlasFont.serifHeading)
                         .foregroundStyle(AtlasColor.textPrimary)
-                        .frame(maxWidth: 220)
-                } else {
-                    Text(store.worldName)
-                        .font(AtlasFont.serifHeading)
-                        .foregroundStyle(AtlasColor.textPrimary)
+                        .lineLimit(1)
+                        .frame(maxWidth: 210, alignment: .leading)
+
+                    if canEdit {
+                        Button { openWorldNameEditor() } label: {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 10.5, weight: .semibold))
+                                .frame(width: 22, height: 22)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(AtlasColor.textSecondary)
+                        .atlasP1Glass(Circle(), interactive: true)
+                        .help("编辑企划名称")
+                    }
                 }
+
                 Text(canEdit ? (store.saved ? "所有更改已保存" : "正在编辑 · 尚未保存") : "只读浏览")
                     .font(AtlasFont.monoSmall)
                     .foregroundStyle(AtlasColor.textTertiary)
             }
+        }
+    }
 
-            Spacer()
-
-            projectionSwitch
-
-            Spacer()
-
-            if canEdit {
+    @ViewBuilder
+    private var topBarActions: some View {
+        if canEdit {
+            HStack(spacing: AtlasSpacing.m) {
                 baseLayerMenu
 
                 Button {
@@ -374,12 +485,10 @@ struct WorldBuilderCanvas: View {
                 .buttonStyle(.atlas(.primary))
             }
         }
-        .padding(.vertical, AtlasSpacing.m)
-        .padding(.trailing, AtlasSpacing.m)
-        // macOS 交通灯（红黄绿）在 .hiddenTitleBar 下仍浮于左上角，给顶栏左侧留出安全区。
-        .padding(.leading, Self.trafficLightInset)
-        .overlay(alignment: .bottom) { Divider().overlay(AtlasColor.borderSubtle) }
-        .background(Color.black.opacity(0.14))
+    }
+
+    private var topBarGlassShape: some Shape {
+        RoundedRectangle(cornerRadius: 30, style: .continuous)
     }
 
     /// macOS 窗口控制按钮（红黄绿）占用的左上安全区宽度。
@@ -393,11 +502,11 @@ struct WorldBuilderCanvas: View {
                 } label: {
                     HStack(spacing: 5) {
                         Image(systemName: mode.symbol).font(.system(size: 11))
-                        Text(mode.rawValue).font(AtlasFont.caption)
+                        Text(mode.rawValue).font(AtlasFont.label)
                     }
                     .foregroundStyle(store.projection == mode ? AtlasColor.inverse : AtlasColor.textSecondary)
-                    .padding(.horizontal, AtlasSpacing.m)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, AtlasSpacing.l)
+                    .padding(.vertical, AtlasSpacing.s)
                     .background {
                         if store.projection == mode {
                             Capsule().fill(Color.white)
@@ -410,6 +519,95 @@ struct WorldBuilderCanvas: View {
         .padding(3)
         .background(AtlasP1Glass.darkFill, in: Capsule())
         .overlay(Capsule().stroke(AtlasColor.borderSubtle))
+        .atlasP1Glass(Capsule())
+    }
+
+    @ViewBuilder
+    private var worldNameEditorOverlay: some View {
+        if showWorldNameEditor {
+            ZStack {
+                Color.black.opacity(0.58)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+                    .onTapGesture { closeWorldNameEditor() }
+
+                VStack(alignment: .leading, spacing: AtlasSpacing.l) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("编辑企划名称")
+                                .font(AtlasFont.heading)
+                                .foregroundStyle(AtlasColor.textPrimary)
+                            Text("保存后会更新顶部显示名称。")
+                                .font(AtlasFont.caption)
+                                .foregroundStyle(AtlasColor.textTertiary)
+                        }
+
+                        Spacer()
+
+                        HStack(spacing: AtlasSpacing.s) {
+                            Button { commitWorldNameEditor() } label: {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .frame(width: 30, height: 30)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(AtlasColor.inverse)
+                            .background(Color.white, in: Circle())
+                            .help("确认")
+
+                            Button { closeWorldNameEditor() } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .frame(width: 30, height: 30)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(AtlasColor.textSecondary)
+                            .atlasP1Glass(Circle(), interactive: true)
+                            .help("关闭窗口")
+                        }
+                    }
+
+                    TextField("未命名世界", text: $worldNameDraft)
+                        .textFieldStyle(.plain)
+                        .font(AtlasFont.serifTitle)
+                        .foregroundStyle(AtlasColor.textPrimary)
+                        .focused($worldNameEditorFocused)
+                        .onSubmit { commitWorldNameEditor() }
+                        .padding(.horizontal, AtlasSpacing.l)
+                        .padding(.vertical, AtlasSpacing.m)
+                        .background(Color.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.14), lineWidth: 1))
+                }
+                .padding(AtlasSpacing.xl)
+                .frame(width: 420)
+                .atlasFrostedPanel(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .transition(.scale(scale: 0.96).combined(with: .opacity))
+                .onAppear {
+                    worldNameEditorFocused = true
+                }
+            }
+            .animation(.snappy(duration: 0.22), value: showWorldNameEditor)
+        }
+    }
+
+    private func openWorldNameEditor() {
+        worldNameDraft = store.worldName
+        withAnimation(.snappy(duration: 0.22)) {
+            showWorldNameEditor = true
+        }
+    }
+
+    private func closeWorldNameEditor() {
+        withAnimation(.snappy(duration: 0.18)) {
+            showWorldNameEditor = false
+        }
+    }
+
+    private func commitWorldNameEditor() {
+        let trimmed = worldNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        store.worldName = trimmed.isEmpty ? "未命名世界" : trimmed
+        store.saved = false
+        closeWorldNameEditor()
     }
 
     // MARK: - 底盘菜单（收进顶栏，不占画布）
@@ -444,7 +642,7 @@ struct WorldBuilderCanvas: View {
             }
             .frame(width: 300)
             .padding(.trailing, AtlasSpacing.l)
-            .padding(.top, 68)
+            .padding(.top, 102)
             .padding(.bottom, AtlasSpacing.l)
             .frame(maxHeight: .infinity, alignment: .top)
             .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -454,10 +652,228 @@ struct WorldBuilderCanvas: View {
             }
             .frame(width: 300)
             .padding(.trailing, AtlasSpacing.l)
-            .padding(.top, 68)
+            .padding(.top, 102)
             .padding(.bottom, AtlasSpacing.l)
             .frame(maxHeight: .infinity, alignment: .top)
             .transition(.move(edge: .trailing).combined(with: .opacity))
+        }
+    }
+
+    // MARK: - 左侧 Session 记录
+
+    private var sessionRail: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            assistantFloatingCard
+                .padding(.top, 112)
+
+            Spacer(minLength: 0)
+
+            sessionTray
+        }
+        .padding(.leading, AtlasSpacing.l)
+        .padding(.bottom, AtlasSpacing.l)
+        .frame(maxHeight: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var assistantFloatingCard: some View {
+        if assistantCardExpanded {
+            VStack(alignment: .leading, spacing: AtlasSpacing.m) {
+                HStack {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(AtlasColor.inverse)
+                        .frame(width: 52, height: 22)
+                        .background(Color.white, in: Capsule())
+                    Spacer()
+                    Button {
+                        withAnimation(.snappy(duration: 0.24)) { assistantCardExpanded = false }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 11, weight: .semibold))
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(AtlasColor.textSecondary)
+                    .help("收起回复卡")
+                }
+
+                if let user = latestUserEntry {
+                    promptPill(user)
+                }
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(latestAssistantEntry.title.isEmpty ? latestAssistantEntry.kind.title : latestAssistantEntry.title)
+                        .font(AtlasFont.label)
+                        .foregroundStyle(AtlasColor.textPrimary)
+
+                    Text(latestAssistantEntry.body)
+                        .font(AtlasFont.caption)
+                        .foregroundStyle(AtlasColor.textSecondary)
+                        .lineLimit(12)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(AtlasSpacing.m)
+            .frame(width: 330, alignment: .leading)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.11),
+                        Color(red: 0.14, green: 0.14, blue: 0.16).opacity(0.84),
+                        Color.black.opacity(0.22)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+            )
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.white.opacity(0.13), lineWidth: 1))
+            .shadow(color: .black.opacity(0.34), radius: 22, y: 12)
+            .transition(.scale(scale: 0.82, anchor: .topLeading).combined(with: .opacity))
+        } else {
+            Button {
+                withAnimation(.snappy(duration: 0.24)) { assistantCardExpanded = true }
+            } label: {
+                Image(systemName: "bubble.left.and.text.bubble.right")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 56, height: 36)
+                    .foregroundStyle(AtlasColor.textPrimary)
+                    .atlasP1Glass(Capsule(), interactive: true)
+            }
+            .buttonStyle(.plain)
+            .help("展开最新回复")
+            .transition(.scale(scale: 0.86, anchor: .topLeading).combined(with: .opacity))
+        }
+    }
+
+    private var sessionTray: some View {
+        Group {
+            if sessionExpanded {
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: AtlasSpacing.s) {
+                        ForEach(recentSessionEntries) { entry in
+                            sessionChip(entry)
+                        }
+                    }
+                    .padding(.horizontal, AtlasSpacing.m)
+                    .padding(.top, AtlasSpacing.m)
+                    .padding(.bottom, AtlasSpacing.s)
+
+                    Divider().overlay(AtlasColor.borderSubtle)
+
+                    Button {
+                        withAnimation(.snappy(duration: 0.24)) { sessionExpanded = false }
+                    } label: {
+                        HStack(spacing: AtlasSpacing.s) {
+                            Image(systemName: "paperplane")
+                            Text("智能体日志").font(AtlasFont.label)
+                            Spacer()
+                            Image(systemName: "chevron.down").font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundStyle(AtlasColor.textPrimary)
+                        .padding(.horizontal, AtlasSpacing.m)
+                        .frame(height: 48)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .frame(width: 330, alignment: .leading)
+                .atlasFrostedPanel(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
+                .transition(.move(edge: .leading).combined(with: .opacity))
+            } else {
+                Button {
+                    withAnimation(.snappy(duration: 0.24)) { sessionExpanded = true }
+                } label: {
+                    HStack(spacing: AtlasSpacing.s) {
+                        Image(systemName: "paperplane")
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundStyle(AtlasColor.textPrimary)
+                    .padding(.horizontal, AtlasSpacing.m)
+                    .frame(height: 36)
+                    .atlasP1Glass(Capsule(), interactive: true)
+                }
+                .buttonStyle(.plain)
+                .transition(.scale(scale: 0.86, anchor: .bottomLeading).combined(with: .opacity))
+            }
+        }
+    }
+
+    private var latestUserEntry: AgentSessionEntry? {
+        sessionEntries.last { $0.kind == .user }
+    }
+
+    private var latestAssistantEntry: AgentSessionEntry {
+        sessionEntries.last { $0.kind != .user } ?? sessionEntries[0]
+    }
+
+    private var recentSessionEntries: [AgentSessionEntry] {
+        Array(sessionEntries.suffix(2))
+    }
+
+    private func promptPill(_ entry: AgentSessionEntry) -> some View {
+        HStack(spacing: AtlasSpacing.s) {
+            Text("E")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(AtlasColor.auroraMint.opacity(0.72), in: Circle())
+            Text(entry.body.isEmpty ? entry.title : entry.body)
+                .font(AtlasFont.caption)
+                .foregroundStyle(AtlasColor.textSecondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(entry.body, forType: .string)
+            } label: {
+                Image(systemName: "doc.on.doc")
+                    .font(.system(size: 11))
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AtlasColor.textTertiary)
+        }
+        .padding(.horizontal, AtlasSpacing.s)
+        .padding(.vertical, AtlasSpacing.s)
+        .background(Color.black.opacity(0.18), in: Capsule())
+    }
+
+    private func sessionChip(_ entry: AgentSessionEntry) -> some View {
+        Button {
+            withAnimation(.snappy(duration: 0.22)) { assistantCardExpanded = true }
+        } label: {
+            HStack(spacing: AtlasSpacing.s) {
+                Image(systemName: entry.kind == .user ? "checkmark.circle" : entry.kind.symbol)
+                    .font(.system(size: 12))
+                Text(entry.body.isEmpty ? entry.title : entry.body)
+                    .font(AtlasFont.caption)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(AtlasColor.textSecondary)
+            .padding(.horizontal, AtlasSpacing.s)
+            .frame(height: 30)
+            .background(Color.white.opacity(0.055), in: Capsule())
+            .overlay(Capsule().stroke(Color.white.opacity(0.09), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func sessionTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private func appendSession(_ kind: AgentSessionEntry.Kind, title: String, body: String) {
+        withAnimation(.easeOut(duration: 0.18)) {
+            sessionEntries.append(.init(kind: kind, title: title, body: body))
+            if sessionEntries.count > 30 {
+                sessionEntries.removeFirst(sessionEntries.count - 30)
+            }
         }
     }
 
@@ -467,44 +883,57 @@ struct WorldBuilderCanvas: View {
     private var commandBar: some View {
         if canEdit {
             VStack(spacing: AtlasSpacing.s) {
-            // 整理通道：思考 / 方案预览 / 错误（与递卡并列的另一条通道）
-            if commandMode == .organize {
-                organizePanel
-            } else if let object = store.selected {
-                quickActionRow(object)
-            }
-
-            HStack(spacing: AtlasSpacing.s) {
-                modeToggle
-                Divider().frame(height: 16).overlay(AtlasColor.borderSubtle)
-                Image(systemName: commandMode == .organize
-                      ? "wand.and.stars"
-                      : (store.selected == nil ? "plus.circle" : "text.cursor"))
-                    .font(.system(size: 13))
-                    .foregroundStyle(AtlasColor.textTertiary)
-                TextField(commandPlaceholder, text: $commandText)
-                    .textFieldStyle(.plain)
-                    .font(AtlasFont.body)
-                    .foregroundStyle(AtlasColor.textPrimary)
-                    .focused($commandFocused)
-                    .onSubmit { runCommand() }
-                Button { runCommand() } label: {
-                    Image(systemName: commandMode == .organize ? "wand.and.stars" : "arrow.up")
-                        .frame(width: 20, height: 20)
+                // 研究 / 整理 / 批量新建都先给方案；对象快捷 chip 固定在输入框上方。
+                if commandMode == .organize {
+                    organizePanel
+                } else if commandMode == .research {
+                    inspirationPanel
+                } else if !batchDrafts.isEmpty {
+                    batchCreatePanel
                 }
-                .buttonStyle(.atlas(.primary))
-                .disabled(commandText.trimmingCharacters(in: .whitespaces).isEmpty || organizer.isThinking)
+                contextChipRow
+
+                HStack(spacing: AtlasSpacing.s) {
+                    modeToggle
+                    Divider().frame(height: 16).overlay(AtlasColor.borderSubtle)
+                    Image(systemName: commandMode == .organize
+                          ? "wand.and.stars"
+                          : (commandMode == .research ? "magnifyingglass" : (store.selected == nil ? "plus.circle" : "text.cursor")))
+                        .font(.system(size: 13))
+                        .foregroundStyle(AtlasColor.textTertiary)
+                    TextField(commandPlaceholder, text: $commandText)
+                        .textFieldStyle(.plain)
+                        .font(AtlasFont.body)
+                        .foregroundStyle(AtlasColor.textPrimary)
+                        .focused($commandFocused)
+                        .onSubmit { runCommand() }
+                    Button { runCommand() } label: {
+                        Image(systemName: commandMode == .organize ? "wand.and.stars" : "arrow.up")
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.atlas(.primary))
+                    .disabled(commandText.trimmingCharacters(in: .whitespaces).isEmpty || organizer.isThinking || isParsingIntent || isResearchingInspiration)
+                }
+                .padding(.horizontal, AtlasSpacing.m)
+                .padding(.vertical, AtlasSpacing.s)
+                .frame(width: 560)
+                .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
             }
-            .padding(.horizontal, AtlasSpacing.m)
-            .padding(.vertical, AtlasSpacing.s)
-            .frame(width: 560)
-            .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
-        }
             .padding(.bottom, AtlasSpacing.l)
         }
     }
 
-    // 递卡通道：选中对象的编号快捷建议（Agent 只递卡，采纳才作数）
+    // 输入框上方的上下文 chip：未选中时是画布级能力；选中时是对象级能力。
+    @ViewBuilder
+    private var contextChipRow: some View {
+        if let object = store.selected {
+            quickActionRow(object)
+        } else {
+            canvasActionRow
+        }
+    }
+
+    // 递卡通道：选中对象的编号快捷建议（Agent 只递卡，采纳才作数）。
     private func quickActionRow(_ object: BuilderObject) -> some View {
         HStack(spacing: AtlasSpacing.s) {
             HStack(spacing: 5) {
@@ -533,12 +962,109 @@ struct WorldBuilderCanvas: View {
             }
             Spacer(minLength: 0)
         }
+        .frame(width: 560, alignment: .leading)
+    }
+
+    private var canvasActionRow: some View {
+        HStack(spacing: AtlasSpacing.s) {
+            HStack(spacing: 5) {
+                Image(systemName: "square.grid.2x2").font(.system(size: 11))
+                Text("画布").font(AtlasFont.caption)
+            }
+            .foregroundStyle(AtlasColor.textSecondary)
+            .padding(.horizontal, AtlasSpacing.s).padding(.vertical, 4)
+            .background(Color.white.opacity(0.06), in: Capsule())
+
+            Button {
+                commandMode = .place
+                commandText = "地点：\n角色：\n组织：\n事件："
+                commandFocused = true
+            } label: { commandChip("批量新建", number: 1) }
+            .buttonStyle(.plain)
+
+            Button {
+                commandMode = .place
+                commandFocused = true
+            } label: { commandChip("解析新建", number: 2) }
+            .buttonStyle(.plain)
+
+            Button {
+                commandMode = .organize
+                commandText = "按类型归类"
+                commandFocused = true
+            } label: { commandChip("整理画布", number: 3) }
+            .buttonStyle(.plain)
+
+            Button {
+                commandMode = .research
+                commandText = ""
+                commandFocused = true
+            } label: { commandChip("寻找灵感", number: 4) }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+        }
+        .frame(width: 560, alignment: .leading)
+    }
+
+    private func commandChip(_ title: String, number: Int) -> some View {
+        HStack(spacing: 4) {
+            Text(title).font(AtlasFont.caption)
+            Text("\(number)").font(AtlasFont.monoSmall)
+                .foregroundStyle(AtlasColor.textTertiary)
+        }
+        .foregroundStyle(AtlasColor.textPrimary)
+        .padding(.horizontal, AtlasSpacing.s).padding(.vertical, 5)
+        .background(AtlasP1Glass.darkFill, in: Capsule())
+        .overlay(Capsule().stroke(AtlasColor.borderSubtle))
+    }
+
+    private var batchCreatePanel: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Image(systemName: "square.stack.3d.up").font(.system(size: 11))
+                Text("解析新建方案").font(AtlasFont.label)
+                Spacer()
+                Text("\(batchDrafts.count) 张草稿卡").font(AtlasFont.monoSmall)
+                    .foregroundStyle(AtlasColor.textTertiary)
+            }
+            .foregroundStyle(AtlasColor.textSecondary)
+
+            ForEach(batchDrafts.prefix(5)) { draft in
+                HStack(spacing: 6) {
+                    Image(systemName: draft.kind.symbol).font(.system(size: 10))
+                    Text("\(draft.kind.title) · \(draft.name)").font(AtlasFont.caption).lineLimit(1)
+                }
+                .foregroundStyle(AtlasColor.textSecondary)
+            }
+            if batchDrafts.count > 5 {
+                Text("…等共 \(batchDrafts.count) 张").font(AtlasFont.monoSmall)
+                    .foregroundStyle(AtlasColor.textTertiary)
+            }
+
+            HStack(spacing: AtlasSpacing.s) {
+                Button { adoptBatchDrafts() } label: {
+                    AtlasButtonLabel(title: "采纳新建", systemImage: "checkmark")
+                }
+                .buttonStyle(.atlas(.primary))
+                Button { withAnimation(.easeOut(duration: 0.2)) { batchDrafts = [] } } label: {
+                    AtlasButtonLabel(title: "撤销", systemImage: "xmark")
+                }
+                .buttonStyle(.atlas(.glass))
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 2)
+        }
+        .frame(width: 560, alignment: .leading)
+        .padding(.horizontal, AtlasSpacing.m).padding(.vertical, AtlasSpacing.s)
+        .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
     }
 
     // 放置 / AI 整理 模式切换
     private var modeToggle: some View {
         HStack(spacing: 2) {
             modeSeg("放置", .place, "plus")
+            modeSeg("灵感", .research, "sparkles")
             modeSeg("整理", .organize, "wand.and.stars")
         }
         .padding(2)
@@ -596,11 +1122,14 @@ struct WorldBuilderCanvas: View {
                 }
 
                 HStack(spacing: AtlasSpacing.s) {
-                    Button { organizer.adopt(into: store) } label: {
+                    Button { adoptOrganizePlan() } label: {
                         AtlasButtonLabel(title: "采纳整理", systemImage: "checkmark")
                     }
                     .buttonStyle(.atlas(.primary))
-                    Button { organizer.discard() } label: {
+                    Button {
+                        appendSession(.parse, title: "撤销整理", body: "已丢弃当前整理方案。")
+                        organizer.discard()
+                    } label: {
                         AtlasButtonLabel(title: "撤销", systemImage: "xmark")
                     }
                     .buttonStyle(.atlas(.glass))
@@ -635,6 +1164,9 @@ struct WorldBuilderCanvas: View {
     private var commandPlaceholder: String {
         if commandMode == .organize {
             return "让我整理画布：如「按类型归类」「把艾琳娜和森林议会连起来」"
+        }
+        if commandMode == .research {
+            return "从真实世界找灵感：如「火山闪电」「一场历史上的粮食危机」"
         }
         if let object = store.selected {
             return "对「\(store.displayName(object))」追问或补充…"
@@ -679,47 +1211,247 @@ struct WorldBuilderCanvas: View {
     private func runCommand() {
         let text = commandText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        let sessionTitle: String
+        switch commandMode {
+        case .organize: sessionTitle = "整理指令"
+        case .research: sessionTitle = "灵感方向"
+        case .place: sessionTitle = "画布指令"
+        }
+        appendSession(.user, title: sessionTitle, body: text)
 
         // 整理通道：交给 Agent 生成待采纳的整理方案（只动布局与关系，不改正文）。
         if commandMode == .organize {
             organizer.propose(instruction: text, store: store)
+            appendSession(.parse, title: "正在生成整理方案", body: "模型会被限制为布局与关系工具，不会改写卡片正文。")
             commandText = ""
             return
         }
 
-        if let id = store.selectedID, let index = store.objects.firstIndex(where: { $0.id == id }) {
+        if commandMode == .research {
+            researchInspiration(text)
+            commandText = ""
+            return
+        }
+
+        if shouldRouteToSelectedObject(text),
+           let id = store.selectedID,
+           let index = store.objects.firstIndex(where: { $0.id == id }) {
             store.objects[index].summary = store.objects[index].summary.isEmpty
                 ? text : store.objects[index].summary + "\n" + text
             store.saved = false
+            appendSession(.adopt, title: "写入选中对象", body: "已追加到「\(store.displayName(store.objects[index]))」的档案草稿。")
         } else {
-            let kind = inferKind(from: text)
-            placeCount += 1
-            let center = CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
-            let angle = Double(placeCount) * 2.399
-            let radius = 24.0 * Double(min(placeCount, 6))
-            let screen = CGPoint(x: center.x + CGFloat(cos(angle) * radius),
-                                 y: center.y + CGFloat(sin(angle) * radius))
-            let world = screenToWorld(screen)
-            withAnimation(.snappy(duration: 0.25)) {
-                let newID = store.add(kind, at: world)
-                if let i = store.objects.firstIndex(where: { $0.id == newID }) {
-                    store.objects[i].name = text
-                }
-            }
+            parseCanvasIntent(text)
         }
         commandText = ""
     }
 
-    // 轻量关键词推断：只是给一个初始类型，作者可在详情卡一键改。不是终局分类。
-    private func inferKind(from text: String) -> BuilderKind {
-        func has(_ words: [String]) -> Bool { words.contains { text.contains($0) } }
-        if has(["组织", "阵营", "势力", "公会", "军团", "教会", "家族", "帮", "同盟", "议会"]) { return .org }
-        if has(["事件", "祭", "战", "典礼", "仪式", "风暴", "叛乱", "会战", "节日"]) { return .event }
-        if has(["规则", "禁令", "律法", "法则", "边界", "限制", "政策"]) { return .rule }
-        if has(["角色", "守望", "者", "先生", "小姐", "师", "国王", "客", "队长", "匠"]) { return .character }
-        if has(["物件", "长剑", "灯", "书", "钥匙", "印记", "符文", "器物"]) { return .item }
-        if has(["作品", "画作", "手稿", "曲", "诗"]) { return .work }
-        return .location
+    private func shouldRouteToSelectedObject(_ text: String) -> Bool {
+        guard store.selectedID != nil else { return false }
+        let createWords = ["新建", "创建", "新增", "添加", "生成一个", "建一个", "批量"]
+        return !createWords.contains { text.contains($0) }
+    }
+
+    private func parseCanvasIntent(_ text: String) {
+        AgentTelemetry.track("agent_canvas_parse_requested")
+        isParsingIntent = true
+        appendSession(.parse, title: AgentConfig.isConfigured ? "正在理解画布指令" : "本地规则解析", body: AgentConfig.isConfigured ? "使用建档助手技能：批量新建 / 命名解析 / 类型识别 / 摘要整理。" : "未配置模型 Key，使用本地关键词兜底。")
+
+        Task { @MainActor in
+            let drafts: [BatchCreateDraft]
+            if AgentConfig.isConfigured {
+                do {
+                    let reply = try await DeepSeekClient().parseCanvasIntent(
+                        instruction: text,
+                        snapshot: CanvasOrganizer.snapshot(store)
+                    )
+                    drafts = reply.drafts.map { BatchCreateDraft(kind: $0.kind, name: $0.name, summary: $0.summary) }
+                } catch {
+                    appendSession(.parse, title: "模型解析失败，已降级", body: error.localizedDescription)
+                    drafts = CanvasIntentParser.parseBatchDrafts(from: text).map { BatchCreateDraft(kind: $0.kind, name: $0.name, summary: $0.summary) }
+                }
+            } else {
+                drafts = CanvasIntentParser.parseBatchDrafts(from: text).map { BatchCreateDraft(kind: $0.kind, name: $0.name, summary: $0.summary) }
+            }
+
+            isParsingIntent = false
+            guard !drafts.isEmpty else {
+                appendSession(.parse, title: "没有识别到可新建对象", body: "可以试试：新建一个地点，命名为雾港。")
+                return
+            }
+
+            if drafts.count > 1 {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.84)) {
+                    batchDrafts = drafts
+                }
+                AgentTelemetry.track("agent_canvas_drafts_proposed", properties: ["count": "\(drafts.count)"])
+                appendSession(.parse, title: "解析新建方案", body: batchSummary(drafts))
+            } else if let draft = drafts.first {
+                createDraftCard(draft)
+                AgentTelemetry.track("agent_canvas_draft_created", properties: ["kind": draft.kind.rawValue])
+                appendSession(.adopt, title: "新建草稿卡", body: "\(draft.kind.title) · \(draft.name)")
+            }
+        }
+    }
+
+    private func createDraftCard(_ draft: BatchCreateDraft) {
+        placeCount += 1
+        let center = CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
+        let angle = Double(placeCount) * 2.399
+        let radius = 32.0 * Double(min(placeCount, 8))
+        let screen = CGPoint(x: center.x + CGFloat(cos(angle) * radius),
+                             y: center.y + CGFloat(sin(angle) * radius))
+        let world = screenToWorld(screen)
+        withAnimation(.snappy(duration: 0.25)) {
+            let newID = store.add(draft.kind, at: world)
+            if let i = store.objects.firstIndex(where: { $0.id == newID }) {
+                store.objects[i].name = draft.name
+                store.objects[i].summary = draft.summary
+                store.objects[i].aiAssisted = true
+            }
+        }
+    }
+
+    private func adoptOrganizePlan() {
+        guard let plan = organizer.plan else { return }
+        appendSession(.adopt, title: "采纳整理方案", body: plan.summaries.prefix(4).joined(separator: "\n"))
+        organizer.adopt(into: store)
+    }
+
+    private func adoptBatchDrafts() {
+        let drafts = batchDrafts
+        guard !drafts.isEmpty else { return }
+        let cols = max(1, Int(ceil(sqrt(Double(drafts.count)))))
+        let center = screenToWorld(CGPoint(x: viewSize.width / 2, y: viewSize.height / 2))
+        let cellW: CGFloat = 280
+        let cellH: CGFloat = 190
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
+            for (index, draft) in drafts.enumerated() {
+                let row = index / cols
+                let col = index % cols
+                let x = center.x + CGFloat(col) * cellW - CGFloat(cols - 1) * cellW / 2
+                let y = center.y + CGFloat(row) * cellH
+                let newID = store.add(draft.kind, at: CGPoint(x: x, y: y))
+                if let i = store.objects.firstIndex(where: { $0.id == newID }) {
+                    store.objects[i].name = draft.name
+                    store.objects[i].summary = draft.summary
+                    store.objects[i].aiAssisted = true
+                }
+            }
+            store.selectedIDs = Set(store.objects.suffix(drafts.count).map(\.id))
+            batchDrafts = []
+        }
+        appendSession(.adopt, title: "采纳批量新建", body: batchSummary(drafts))
+        AgentTelemetry.track("agent_canvas_drafts_adopted", properties: ["count": "\(drafts.count)"])
+    }
+
+    private func batchSummary(_ drafts: [BatchCreateDraft]) -> String {
+        drafts.prefix(6)
+            .map { "\($0.kind.title) · \($0.name)" }
+            .joined(separator: "\n")
+    }
+
+    // MARK: - 真实灵感研究：检索、核验、转译三步均会留下可见日志。
+
+    @ViewBuilder
+    private var inspirationPanel: some View {
+        if isResearchingInspiration {
+            HStack(spacing: 7) {
+                ProgressView().controlSize(.small)
+                Text("正在检索公开资料并核验来源…").font(AtlasFont.caption)
+            }
+            .foregroundStyle(AtlasColor.textSecondary)
+            .frame(width: 560, alignment: .leading)
+            .padding(.horizontal, AtlasSpacing.m).padding(.vertical, AtlasSpacing.s)
+            .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
+        } else if let proposal = inspirationProposal {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.shield").font(.system(size: 11))
+                    Text("已核验的\(proposal.domain.title)灵感").font(AtlasFont.label)
+                    Spacer()
+                    Text("\(String(format: "%.1f", proposal.duration))s").font(AtlasFont.monoSmall)
+                        .foregroundStyle(AtlasColor.textTertiary)
+                }
+                .foregroundStyle(AtlasColor.textSecondary)
+
+                ForEach(proposal.cards) { card in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(card.title).font(AtlasFont.caption).foregroundStyle(AtlasColor.textPrimary).lineLimit(1)
+                        Text(card.fact).font(AtlasFont.monoSmall).foregroundStyle(AtlasColor.textSecondary).lineLimit(2)
+                        Text(card.creativeAngle).font(AtlasFont.monoSmall).foregroundStyle(AtlasColor.textTertiary).lineLimit(2)
+                        Link(card.source.provider, destination: card.source.url)
+                            .font(AtlasFont.monoSmall)
+                            .foregroundStyle(AtlasColor.auroraMint)
+                    }
+                    .padding(.vertical, 3)
+                }
+
+                HStack(spacing: AtlasSpacing.s) {
+                    Button { adoptInspirationProposal() } label: {
+                        AtlasButtonLabel(title: "采纳为便签", systemImage: "checkmark")
+                    }
+                    .buttonStyle(.atlas(.primary))
+                    Button { dismissInspirationProposal() } label: {
+                        AtlasButtonLabel(title: "丢弃", systemImage: "xmark")
+                    }
+                    .buttonStyle(.atlas(.glass))
+                    Spacer(minLength: 0)
+                }
+                .padding(.top, 2)
+            }
+            .frame(width: 560, alignment: .leading)
+            .padding(.horizontal, AtlasSpacing.m).padding(.vertical, AtlasSpacing.s)
+            .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
+        }
+    }
+
+    private func researchInspiration(_ text: String) {
+        isResearchingInspiration = true
+        inspirationProposal = nil
+        AgentTelemetry.track("agent_inspiration_requested")
+        appendSession(.research, title: "选择资料源", body: "正在判断这是自然、历史还是文化方向。")
+
+        Task { @MainActor in
+            do {
+                let proposal = try await InspirationResearchService().research(query: text)
+                appendSession(.research, title: "已找到公开资料", body: "从 \(Set(proposal.cards.map { $0.source.provider }).joined(separator: "、")) 找到 \(proposal.cards.count) 条可用资料。")
+                AgentTelemetry.track("agent_inspiration_sources_loaded", properties: ["domain": proposal.domain.rawValue, "count": "\(proposal.cards.count)"])
+                appendSession(.verify, title: "来源核验完成", body: "每条灵感都绑定了可打开的原始资料链接。")
+                AgentTelemetry.track("agent_inspiration_sources_verified", properties: ["domain": proposal.domain.rawValue, "count": "\(proposal.cards.count)"])
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.84)) { inspirationProposal = proposal }
+                AgentTelemetry.track("agent_inspiration_proposed", properties: ["domain": proposal.domain.rawValue, "count": "\(proposal.cards.count)"])
+            } catch {
+                appendSession(.research, title: "研究没有完成", body: error.localizedDescription)
+                AgentTelemetry.track("agent_inspiration_failed", properties: ["reason": "source_unavailable"])
+            }
+            isResearchingInspiration = false
+        }
+    }
+
+    private func adoptInspirationProposal() {
+        guard let proposal = inspirationProposal else { return }
+        let center = screenToWorld(CGPoint(x: viewSize.width / 2, y: viewSize.height / 2))
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.84)) {
+            for (index, card) in proposal.cards.enumerated() {
+                let id = store.add(.note, at: CGPoint(x: center.x + CGFloat(index) * 230, y: center.y))
+                if let objectIndex = store.objects.firstIndex(where: { $0.id == id }) {
+                    store.objects[objectIndex].name = card.title
+                    store.objects[objectIndex].summary = "事实资料：\(card.fact)\n\n创作转译：\(card.creativeAngle)\n\n来源：\(card.source.provider)\n\(card.source.url.absoluteString)"
+                    store.objects[objectIndex].aiAssisted = true
+                }
+            }
+            inspirationProposal = nil
+        }
+        appendSession(.adopt, title: "采纳灵感便签", body: "已写入 \(proposal.cards.count) 张带来源的便签草稿。")
+        AgentTelemetry.track("agent_inspiration_adopted", properties: ["domain": proposal.domain.rawValue, "count": "\(proposal.cards.count)"])
+    }
+
+    private func dismissInspirationProposal() {
+        guard let proposal = inspirationProposal else { return }
+        withAnimation(.easeOut(duration: 0.2)) { inspirationProposal = nil }
+        appendSession(.parse, title: "丢弃灵感方案", body: "未写入画布，资料来源仍保留在本次智能体日志中。")
+        AgentTelemetry.track("agent_inspiration_dismissed", properties: ["domain": proposal.domain.rawValue])
     }
 
     private func select(_ id: String?) {
@@ -776,7 +1508,7 @@ struct WorldBuilderCanvas: View {
                                   ? CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
                                   : point)
         withAnimation(.snappy(duration: 0.25)) {
-            store.add(kind, at: world)
+            _ = store.add(kind, at: world)
         }
     }
 
@@ -828,9 +1560,9 @@ struct WorldBuilderCanvas: View {
             .onChanged { value in
                 let base = zoomAnchor ?? scale
                 if zoomAnchor == nil { zoomAnchor = scale }
-                scale = min(2.2, max(0.4, base * value.magnification))
+                zoom(to: min(2.2, max(0.4, base * value.magnification)), around: canvasScreenCenter)
             }
-            .onEnded { _ in zoomAnchor = nil }
+            .onEnded { _ in zoomAnchor = nil; panStart = pan }
     }
 
     // 触摸板双指滑动 → 平移；⌘ + 滑动 → 缩放。macOS 原生滚轮事件。
@@ -840,7 +1572,7 @@ struct WorldBuilderCanvas: View {
             if showMapEditor { return event }          // 地图编辑器打开时交给它
             if event.modifierFlags.contains(.command) {
                 let factor = 1 - event.scrollingDeltaY * 0.004
-                scale = min(2.2, max(0.4, scale * factor))
+                zoom(to: min(2.2, max(0.4, scale * factor)), around: canvasScreenCenter)
             } else {
                 pan.width += event.scrollingDeltaX
                 pan.height += event.scrollingDeltaY
@@ -848,6 +1580,40 @@ struct WorldBuilderCanvas: View {
             }
             return nil
         }
+    }
+
+    private var canvasScreenCenter: CGPoint {
+        CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
+    }
+
+    private func centerCanvas(in size: CGSize) {
+        let center = contentWorldCenter
+        pan = CGSize(width: size.width / 2 - center.x * scale,
+                     height: size.height / 2 - center.y * scale)
+        panStart = pan
+    }
+
+    private var contentWorldCenter: CGPoint {
+        guard !store.objects.isEmpty else { return CGPoint(x: 600, y: 400) }
+        let rects = store.objects.map { object in
+            CGRect(
+                x: object.position.x - object.size.width / 2,
+                y: object.position.y - object.size.height / 2,
+                width: object.size.width,
+                height: object.size.height
+            )
+        }
+        let bounds = rects.dropFirst().reduce(rects[0]) { $0.union($1) }
+        return CGPoint(x: bounds.midX, y: bounds.midY)
+    }
+
+    private func zoom(to newScale: CGFloat, around screenPoint: CGPoint) {
+        guard newScale != scale else { return }
+        let worldAnchor = screenToWorld(screenPoint)
+        scale = newScale
+        pan = CGSize(width: screenPoint.x - worldAnchor.x * newScale,
+                     height: screenPoint.y - worldAnchor.y * newScale)
+        panStart = pan
     }
 
     private func stopScrollMonitor() {
@@ -1128,8 +1894,7 @@ private struct MapCardBody: View {
                             .foregroundStyle(AtlasColor.textPrimary)
                     }
                     .buttonStyle(.plain)
-                    .background(AtlasP1Glass.darkFill, in: Circle())
-                    .overlay(Circle().stroke(AtlasColor.borderSubtle))
+                    .atlasP1Glass(Circle(), interactive: true)
                     .help("展开编辑地图")
                 }
                 Spacer()
@@ -1413,6 +2178,6 @@ private struct DetailCard: View {
         }
         .padding(AtlasSpacing.l)
         .frame(maxHeight: .infinity, alignment: .top)
-        .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
+        .atlasFrostedPanel(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
     }
 }

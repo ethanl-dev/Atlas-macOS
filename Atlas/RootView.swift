@@ -2,8 +2,14 @@ import SwiftUI
 
 struct RootView: View {
     @StateObject private var model = AtlasAppModel()
+    @StateObject private var iris = IrisTransition()
+
+    // 创建世界 从星图右上角按钮绽放；返回从编辑器左上角返回按钮收拢。
+    private let createOrigin = UnitPoint(x: 0.9, y: 0.08)
+    private let returnOrigin = UnitPoint(x: 0.04, y: 0.06)
 
     var body: some View {
+        ZStack {
         Group {
             if model.creatingWorld {
                 WorldBuilderCanvas(
@@ -12,16 +18,13 @@ struct RootView: View {
                     worldName: "未命名世界",
                     canEdit: true,
                     onExit: {
-                        withAnimation(.snappy(duration: 0.32)) {
-                            model.creatingWorld = false
-                        }
+                        iris.run(from: returnOrigin) { model.creatingWorld = false }
                     }
                 )
                 .ignoresSafeArea()
-                .transition(.move(edge: .trailing).combined(with: .opacity))
             } else if model.destination == .discover {
                 DiscoverView(model: model) {
-                    withAnimation(.snappy(duration: 0.32)) { model.beginWorldCreation() }
+                    iris.run(from: createOrigin) { model.beginWorldCreation() }
                 }
                 .transition(.opacity)
             } else if model.destination == .profile {
@@ -56,11 +59,13 @@ struct RootView: View {
                 .padding(.bottom, 24)
             }
         }
-        .animation(.snappy(duration: 0.32), value: model.creatingWorld)
         .animation(.easeInOut(duration: 0.42), value: model.destination)
         .onChange(of: model.destination) { _, destination in
             guard !model.canAccess(destination) else { return }
             model.navigate(to: destination)
+        }
+
+            IrisCurtain(iris: iris)
         }
         .sheet(item: $model.activeSheet) { sheet in
             sheetView(sheet)

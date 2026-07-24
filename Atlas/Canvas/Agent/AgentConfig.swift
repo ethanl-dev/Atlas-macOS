@@ -20,7 +20,7 @@ enum AgentConfig {
            !k.trimmingCharacters(in: .whitespaces).isEmpty {
             return k
         }
-        return ""
+        return AgentSecrets.deepSeekAPIKey.trimmingCharacters(in: .whitespaces)
     }
 
     static let keyDefaultsKey = "atlas.deepseek.apiKey"
@@ -30,9 +30,9 @@ enum AgentConfig {
         UserDefaults.standard.string(forKey: "atlas.deepseek.baseURL") ?? "https://api.deepseek.com"
     }
 
-    /// 模型串。默认 deepseek-chat；接入方可改为实际的 "DeepSeek-v4-flash" 等。
+    /// 模型串。默认使用适合画布交互的 DeepSeek v4 Flash。
     static var model: String {
-        UserDefaults.standard.string(forKey: "atlas.deepseek.model") ?? "deepseek-chat"
+        UserDefaults.standard.string(forKey: "atlas.deepseek.model") ?? "deepseek-v4-flash"
     }
 
     static var isConfigured: Bool {

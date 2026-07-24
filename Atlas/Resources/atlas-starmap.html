@@ -659,6 +659,25 @@ focusCard.dataset.lgConfig=JSON.stringify({
 });
 starmapRoot.appendChild(focusCard);
 let renderedWorld = null;
+let hydratedFocusCard = null;
+let focusCardRefreshRaf = 0;
+
+function refreshFocusCardGlass(forceContent=false){
+  if(!starGlassInstance) return;
+  if(forceContent){
+    focusCard.dataset.glassHydration = String(performance.now());
+  }
+  starGlassInstance.markChanged(focusCard);
+  cancelAnimationFrame(focusCardRefreshRaf);
+  let frames = 4;
+  const tick = () => {
+    starGlassInstance.markChanged(focusCard);
+    frames -= 1;
+    if(frames > 0) focusCardRefreshRaf = requestAnimationFrame(tick);
+  };
+  focusCardRefreshRaf = requestAnimationFrame(tick);
+}
+
 function renderFocusCard(w){
   if(renderedWorld===w) return;
   const st = STATUS[w.data.status];
@@ -672,6 +691,8 @@ function renderFocusCard(w){
     </div>
   </div>`;
   renderedWorld = w;
+  hydratedFocusCard = null;
+  refreshFocusCardGlass(true);
 }
 
 const CARD_FAR = 130, CARD_NEAR = 70;   // zoom thresholds
@@ -732,9 +753,14 @@ function updateCards(){
     focusCard.style.opacity = o.toFixed(3);
     focusCard.style.transform = `translate(${best.x.toFixed(1)}px,${(best.y-26).toFixed(1)}px) translate(-50%,-100%) scale(${s.toFixed(3)})`;
     document.body.classList.toggle('card-visible', o > 0.18);
+    if(o > 0.18 && hydratedFocusCard !== best.w){
+      hydratedFocusCard = best.w;
+      requestAnimationFrame(()=>refreshFocusCardGlass(true));
+    }
   } else {
     focusCard.style.opacity = '0';
     document.body.classList.remove('card-visible');
+    hydratedFocusCard = null;
   }
   document.body.classList.toggle('deep', rig.dist < CARD_FAR);
 }
@@ -1021,7 +1047,10 @@ requestAnimationFrame(()=>{
   renderFocusCard(worlds[0]);
   renderDetail(worlds[0]);
   AtlasLG.init()
-    .then(instances=>{ starGlassInstance=instances.get(starmapRoot) || null; })
+    .then(instances=>{
+      starGlassInstance=instances.get(starmapRoot) || null;
+      requestAnimationFrame(()=>refreshFocusCardGlass(true));
+    })
     .catch(error=>console.error('Liquid Glass initialization failed:',error));
 });
 </script>

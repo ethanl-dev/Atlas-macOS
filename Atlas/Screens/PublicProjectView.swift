@@ -22,6 +22,8 @@ struct PublicProjectView: View {
             }
         }
         .animation(.spring(response: 0.38, dampingFraction: 0.84), value: selectedWork?.id)
+        .ignoresSafeArea(.container, edges: .top)
+        .background(AtlasCanvasBackground())
     }
 
     private var hero: some View {

@@ -65,10 +65,59 @@ enum AgentToolSchema {
         ]
     }
 
+    /// 放置 / 新建通道的技能工具。模型只能提出待采纳草稿，不能直接落正式设定。
+    static func creationTools() -> [[String: Any]] {
+        [
+            fn("propose_cards",
+               "把用户的自然语言解析成一组待新建的世界对象草稿。用于新建/创建/添加地点、角色、组织、事件、规则、物件、作品、便签等请求。",
+               ["type": "object",
+                "properties": [
+                    "cards": ["type": "array",
+                              "items": ["type": "object",
+                                        "properties": [
+                                            "kind": ["type": "string",
+                                                     "enum": ["map", "location", "character", "org", "event", "rule", "item", "work", "note"],
+                                                     "description": "对象类型"],
+                                            "name": ["type": "string", "description": "对象名称。若用户说'命名为/叫/名称为 X'，必须只取 X。"],
+                                            "summary": ["type": "string", "description": "用户给出的简短说明；没有则留空。"]
+                                        ],
+                                        "required": ["kind", "name"]]]
+                ],
+                "required": ["cards"]])
+        ]
+    }
+
+    static func inspirationTools() -> [[String: Any]] {
+        [
+            fn("propose_inspirations",
+               "根据已提供且可访问的真实资料，提出不超过 3 条可采纳的创作灵感。每条都必须引用 sources 中完全一致的 source_url。",
+               ["type": "object",
+                "properties": [
+                    "cards": ["type": "array", "items": ["type": "object", "properties": [
+                        "title": ["type": "string"],
+                        "fact": ["type": "string", "description": "仅概括给定资料中明确出现的事实，不得补造。"],
+                        "creative_angle": ["type": "string", "description": "将事实转译成创作启发，须明确是灵感而非真实设定。"],
+                        "source_url": ["type": "string", "description": "必须是 sources 中给出的原始链接之一。"]
+                    ], "required": ["title", "fact", "creative_angle", "source_url"]]]
+                ], "required": ["cards"]])
+        ]
+    }
+
     private static func fn(_ name: String, _ desc: String, _ params: [String: Any]) -> [String: Any] {
         ["type": "function",
          "function": ["name": name, "description": desc, "parameters": params]]
     }
+}
+
+struct CanvasDraftProposal: Equatable {
+    var kind: BuilderKind
+    var name: String
+    var summary: String
+}
+
+struct CanvasIntentReply {
+    var drafts: [CanvasDraftProposal]
+    var assistantText: String
 }
 
 // MARK: - 从模型工具调用解析出的动作
