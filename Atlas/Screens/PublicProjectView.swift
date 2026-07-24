@@ -163,7 +163,7 @@ struct PublicProjectView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.leading, AtlasSpacing.xxl)
         .padding(.top, AtlasSpacing.l)
-        .background(AtlasColor.canvas)
+        .background(.ultraThinMaterial.opacity(0.28))
     }
 
     private var pageLayout: some View {
@@ -179,6 +179,27 @@ struct PublicProjectView: View {
 
             persistentInfoRail
                 .frame(width: 320)
+        }
+        .background {
+            ZStack {
+                Image("PixabayBanner")
+                    .resizable()
+                    .scaledToFill()
+                    .blur(radius: 52)
+                    .scaleEffect(1.18)
+                    .opacity(0.88)
+                Color.black.opacity(0.34)
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.10),
+                        AtlasColor.auroraViolet.opacity(0.10),
+                        AtlasColor.auroraMint.opacity(0.08)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+            .clipped()
         }
     }
 
@@ -358,10 +379,26 @@ struct PublicProjectView: View {
         }
         .padding(AtlasSpacing.l)
         .frame(maxWidth: .infinity, minHeight: 160, alignment: .topLeading)
-        .atlasChromaticGlass(
-            RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous),
-            tint: tint
+        .background(
+            .ultraThinMaterial,
+            in: RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
         )
+        .background(
+            Color.white.opacity(0.15),
+            in: RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [.white.opacity(0.72), .white.opacity(0.18)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        }
+        .shadow(color: .black.opacity(0.18), radius: 18, y: 10)
     }
 
     private func pulseRow(_ label: String, detail: String) -> some View {
@@ -419,41 +456,16 @@ private enum PublicTab: String, CaseIterable, Identifiable {
 private struct PublicWorldArtwork: View {
     var body: some View {
         ZStack {
-            Color(white: 0.055)
-            Canvas { context, size in
-                let horizon = size.height * 0.58
-                for index in 0..<12 {
-                    let y = horizon + CGFloat(index) * 13
-                    var wave = Path()
-                    wave.move(to: CGPoint(x: 0, y: y))
-                    for sample in 0...80 {
-                        let x = CGFloat(sample) / 80 * size.width
-                        let dy = sin(CGFloat(sample) * 0.35 + CGFloat(index)) * CGFloat(2 + index / 3)
-                        wave.addLine(to: CGPoint(x: x, y: y + dy))
-                    }
-                    context.stroke(wave, with: .color(.white.opacity(0.025 + Double(index) * 0.006)), lineWidth: 1)
-                }
-
-                let towers = [
-                    CGRect(x: size.width * 0.18, y: horizon - 90, width: 18, height: 90),
-                    CGRect(x: size.width * 0.48, y: horizon - 140, width: 24, height: 140),
-                    CGRect(x: size.width * 0.78, y: horizon - 72, width: 16, height: 72)
-                ]
-                for tower in towers {
-                    context.fill(Path(roundedRect: tower, cornerRadius: 5), with: .color(.white.opacity(0.16)))
-                    let light = CGRect(x: tower.midX - 4, y: tower.minY - 5, width: 8, height: 8)
-                    context.fill(Path(ellipseIn: light), with: .color(.white.opacity(0.95)))
-                }
-            }
-            .blur(radius: 0.2)
-
-            RadialGradient(
-                colors: [.white.opacity(0.10), .clear],
-                center: UnitPoint(x: 0.50, y: 0.38),
-                startRadius: 0,
-                endRadius: 310
+            Image("PixabayBanner")
+                .resizable()
+                .scaledToFill()
+            LinearGradient(
+                colors: [.black.opacity(0.04), .black.opacity(0.42)],
+                startPoint: .top,
+                endPoint: .bottom
             )
         }
+        .clipped()
     }
 }
 
@@ -509,26 +521,14 @@ struct CharacterPortrait: View {
     var initials: String
 
     var body: some View {
-        ZStack {
-            Color(white: 0.07 + Double(seed % 3) * 0.02)
-            Canvas { context, size in
-                let center = CGPoint(x: size.width / 2, y: size.height * 0.46)
-                context.fill(
-                    Path(ellipseIn: CGRect(x: center.x - 38, y: center.y - 58, width: 76, height: 76)),
-                    with: .color(.white.opacity(0.10))
-                )
-                var body = Path()
-                body.move(to: CGPoint(x: center.x - 82, y: size.height))
-                body.addQuadCurve(
-                    to: CGPoint(x: center.x + 82, y: size.height),
-                    control: CGPoint(x: center.x, y: center.y + 8)
-                )
-                context.fill(body, with: .color(.white.opacity(0.08)))
+        PixabayLandscape(seed: seed)
+            .overlay(alignment: .bottomLeading) {
+                Text(initials)
+                    .font(.system(size: 28, weight: .light, design: .serif))
+                    .foregroundStyle(.white)
+                    .padding(AtlasSpacing.m)
+                    .shadow(color: .black.opacity(0.8), radius: 8)
             }
-            Text(initials)
-                .font(.system(size: 34, weight: .ultraLight, design: .serif))
-                .foregroundStyle(Color.white.opacity(0.6))
-        }
         .clipShape(RoundedRectangle(cornerRadius: AtlasRadius.card))
         .overlay(RoundedRectangle(cornerRadius: AtlasRadius.card).stroke(AtlasColor.borderSubtle))
     }
@@ -556,26 +556,45 @@ private struct AssetArtworkPreview: View {
     var symbol: String
 
     var body: some View {
-        ZStack {
-            Color(white: 0.07 + Double(seed % 3) * 0.018)
-            Canvas { context, size in
-                for index in 0..<10 {
-                    let y = CGFloat(index) / 10 * size.height
-                    var path = Path()
-                    path.move(to: CGPoint(x: 0, y: y))
-                    path.addCurve(
-                        to: CGPoint(x: size.width, y: y + 10),
-                        control1: CGPoint(x: size.width * 0.3, y: y + CGFloat(seed * 7)),
-                        control2: CGPoint(x: size.width * 0.7, y: y - CGFloat(seed * 5))
-                    )
-                    context.stroke(path, with: .color(.white.opacity(0.035 + Double(index) * 0.009)), lineWidth: 1)
-                }
+        PixabayLandscape(seed: seed + 2)
+            .overlay {
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.28)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             }
-            Image(systemName: symbol)
-                .font(.system(size: 28, weight: .ultraLight))
-                .foregroundStyle(Color.white.opacity(0.68))
-        }
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: symbol)
+                    .font(.system(size: 28, weight: .ultraLight))
+                    .foregroundStyle(.white.opacity(0.88))
+                    .padding(AtlasSpacing.m)
+                    .shadow(color: .black.opacity(0.7), radius: 7)
+            }
         .clipShape(RoundedRectangle(cornerRadius: AtlasRadius.card))
         .overlay(RoundedRectangle(cornerRadius: AtlasRadius.card).stroke(AtlasColor.borderSubtle))
+    }
+}
+
+private struct PixabayLandscape: View {
+    let seed: Int
+
+    private var imageName: String {
+        let names = [
+            "PixabayBanner",
+            "PixabayLandscape2",
+            "PixabayLandscape3",
+            "PixabayLandscape4",
+            "PixabayLandscape5",
+            "PixabayLandscape6"
+        ]
+        return names[abs(seed) % names.count]
+    }
+
+    var body: some View {
+        Image(imageName)
+            .resizable()
+            .scaledToFill()
+            .clipped()
     }
 }
