@@ -88,20 +88,18 @@ struct RootView: View {
                 .animation(.snappy(duration: 0.24), value: model.toast)
 
             if model.destination != .canvas {
-                VStack {
-                    Spacer()
-                    HStack(alignment: .bottom) {
-                        ProfileBrandDock(model: model)
-                        Spacer()
-                        ProjectQuickMenu(model: model)
-                    }
-                }
-                .padding(.leading, 24)
-                .padding(.top, 24)
+                ProfileBrandDock(model: model)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(.leading, 24)
+                    .padding(.bottom, 24)
+                    .zIndex(100)
+            }
+
+            ProjectQuickMenu(model: model)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .padding(.bottom, 24)
                 .padding(.trailing, 12)
-                .zIndex(100)
-            }
+                .zIndex(101)
         }
     }
 

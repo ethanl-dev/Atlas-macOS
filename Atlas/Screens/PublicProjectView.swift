@@ -142,7 +142,7 @@ struct PublicProjectView: View {
         AtlasGlassGroup(spacing: 10) {
             HStack(spacing: 10) {
                 Button {
-                    model.navigate(to: .canvas)
+                    model.enterCanvas()
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {

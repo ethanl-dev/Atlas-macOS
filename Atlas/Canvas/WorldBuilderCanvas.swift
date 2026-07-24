@@ -436,11 +436,16 @@ struct WorldBuilderCanvas: View {
     private var topBarTitleGroup: some View {
         HStack(spacing: AtlasSpacing.m) {
             Button { onExit() } label: {
-                Image(systemName: "chevron.left").frame(width: 24, height: 24)
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
+                    .atlasP1Glass(Circle(), interactive: true)
             }
             .buttonStyle(.plain)
             .foregroundStyle(AtlasColor.textPrimary)
-            .atlasP1Glass(Circle(), interactive: true)
+            .contentShape(Circle())
+            .help("退出画布")
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(alignment: .firstTextBaseline, spacing: AtlasSpacing.s) {

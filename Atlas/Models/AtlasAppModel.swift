@@ -415,6 +415,11 @@ final class AtlasAppModel: ObservableObject {
         self.destination = destination
     }
 
+    /// World Canvas 是所有企划身份的共同首入口；权限差异只体现在画布内部是否可编辑。
+    func enterCanvas() {
+        destination = .canvas
+    }
+
     func openWorld(_ world: AtlasWorld) {
         activeWorldID = world.id
         let resolvedRole = role(in: world.id)
