@@ -282,6 +282,7 @@ struct ObjectEditorSheet: View {
 
     @State private var name = ""
     @State private var summary = ""
+    @State private var mentions: [String] = []
     @State private var type: WorldObjectType = .location
     @State private var status: WorldObjectStatus = .draft
 
@@ -319,13 +320,7 @@ struct ObjectEditorSheet: View {
                         .padding(AtlasSpacing.m)
                         .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: AtlasRadius.control))
 
-                    TextEditor(text: $summary)
-                        .font(AtlasFont.body)
-                        .scrollContentBackground(.hidden)
-                        .padding(AtlasSpacing.s)
-                        .frame(height: 150)
-                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: AtlasRadius.control))
-                        .overlay(RoundedRectangle(cornerRadius: AtlasRadius.control).stroke(AtlasColor.borderSubtle))
+                    MentionTextEditor(text: $summary, mentions: $mentions)
 
                     Picker("状态", selection: $status) {
                         Text("草稿").tag(WorldObjectStatus.draft)
@@ -346,7 +341,8 @@ struct ObjectEditorSheet: View {
             HStack {
                 Spacer()
                 Button {
-                    model.showToast(name.isEmpty ? "已创建未命名\(type.rawValue)草稿" : "已创建「\(name)」草稿")
+                    let base = name.isEmpty ? "已创建未命名\(type.rawValue)草稿" : "已创建「\(name)」草稿"
+                    model.showToast(mentions.isEmpty ? base : "\(base)，含 \(mentions.count) 处提及")
                     dismiss()
                 } label: {
                     AtlasButtonLabel(title: "保存到待确认层", systemImage: "checkmark")

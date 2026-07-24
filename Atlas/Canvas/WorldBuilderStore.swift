@@ -93,12 +93,6 @@ enum BuilderKind: String, CaseIterable, Identifiable {
 
 enum BuilderShape { case pin, circle, hexagon, diamond, square, note }
 
-enum BuilderStatus: String, CaseIterable, Identifiable {
-    case draft = "草稿"
-    case official = "正式"
-    var id: String { rawValue }
-}
-
 // MARK: - 世界对象
 
 struct BuilderObject: Identifiable {
@@ -106,7 +100,6 @@ struct BuilderObject: Identifiable {
     var kind: BuilderKind
     var name: String
     var summary: String
-    var status: BuilderStatus
     var position: CGPoint      // 画布世界坐标（卡片中心）
     var size: CGSize           // 卡片尺寸（世界坐标，可拉角改变）
     var aiAssisted: Bool = false
@@ -119,6 +112,10 @@ struct BuilderRelation: Identifiable {
     var sourceID: String
     var targetID: String
     var label: String
+    /// 关联所在的字段名（结构性 link 的语义锚点）；正文 @ 提及用 "提及"。
+    var fieldKey: String = ""
+    /// 关系性 link 的子标签（盟友/敌对/对抗…），结构性为 nil。
+    var subtag: String? = nil
 }
 
 // MARK: - 投影模式（同一批对象的三种排布，不是三块画布）
@@ -165,13 +162,13 @@ final class WorldBuilderStore: ObservableObject {
         if seeded {
             self.objects = [
                 .init(id: "map-seed", kind: .map, name: "世界底盘",
-                      summary: "", status: .draft,
+                      summary: "",
                       position: CGPoint(x: 470, y: 330), size: BuilderKind.map.defaultSize),
                 .init(id: "loc-seed", kind: .location, name: "雾港",
-                      summary: "声音会在退潮时被海水带走。", status: .draft,
+                      summary: "声音会在退潮时被海水带走。",
                       position: CGPoint(x: 780, y: 250), size: BuilderKind.location.defaultSize),
                 .init(id: "chr-seed", kind: .character, name: "守望者·岑",
-                      summary: "白塔档案室的守夜人。", status: .draft,
+                      summary: "白塔档案室的守夜人。",
                       position: CGPoint(x: 800, y: 470), size: BuilderKind.character.defaultSize)
             ]
             self.mapMade = true
@@ -191,7 +188,7 @@ final class WorldBuilderStore: ObservableObject {
             get: {
                 self.objects.first(where: { $0.id == id }) ?? BuilderObject(
                     id: id, kind: .note, name: "", summary: "",
-                    status: .draft, position: .zero, size: .zero
+                    position: .zero, size: .zero
                 )
             },
             set: {
@@ -209,7 +206,7 @@ final class WorldBuilderStore: ObservableObject {
         let id = "\(kind.rawValue)-\(counter)-\(Int(Date().timeIntervalSince1970))"
         let object = BuilderObject(
             id: id, kind: kind, name: "",
-            summary: "", status: .draft, position: position, size: kind.defaultSize
+            summary: "", position: position, size: kind.defaultSize
         )
         objects.append(object)
         if kind == .map { mapMade = true }

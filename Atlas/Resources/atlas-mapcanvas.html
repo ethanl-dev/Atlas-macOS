@@ -176,7 +176,8 @@ html,body{background:#0b0b0e;color:var(--ink)}
   color:var(--ink);
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 10px 30px rgba(0,0,0,.5)!important;
 }
-.editor-top{border-bottom:1px solid var(--line)}
+/* macOS 交通灯（红黄绿）在无标题栏窗口下浮于左上角，给顶栏左侧留出安全区 */
+.editor-top{border-bottom:1px solid var(--line);padding-left:82px!important}
 .tool-dock{box-shadow:inset -1px 0 rgba(255,255,255,.07)!important}
 .tool-dock section{box-shadow:inset 0 -1px rgba(255,255,255,.07)}
 .tool-dock section:last-child{box-shadow:none}

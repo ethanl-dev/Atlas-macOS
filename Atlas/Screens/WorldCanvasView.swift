@@ -10,6 +10,7 @@ struct WorldCanvasView: View {
     @State private var showEvents = true
     @State private var showRelations = true
     @State private var zoom: CGFloat = 1
+    @State private var links = LinkStore()
     @State private var nodePositions: [String: CGPoint] = [
         "WLD-001": .init(x: 0.50, y: 0.52),
         "LOC-014": .init(x: 0.29, y: 0.34),
@@ -314,10 +315,19 @@ struct WorldCanvasView: View {
 
             InspectorProperty(label: "状态", value: object.status.rawValue)
             InspectorProperty(label: "版本", value: "v\(object.version)")
-            InspectorProperty(label: "关联对象", value: "\(object.linkCount)")
+            InspectorProperty(label: "关联对象", value: "\(object.linkCount + links.count(for: object.id))")
             InspectorProperty(label: "可见范围", value: object.status == .published ? "公开" : "企划成员")
             if agent.draftCount(object.id) > 0 {
                 InspectorProperty(label: "AI 草稿字段", value: "+\(agent.draftCount(object.id))（待确认）")
+            }
+
+            // 关联区：结构性 / 关系性 link 的字段化编辑（管理态）
+            if model.accessMode == .manage, !LinkRules.fields(for: object.type).isEmpty {
+                Divider().overlay(AtlasColor.borderSubtle)
+                ScrollView {
+                    LinkSection(object: object, store: links)
+                }
+                .frame(maxHeight: 210)
             }
 
             Spacer()

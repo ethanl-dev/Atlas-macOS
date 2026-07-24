@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 //
 //  WorldBuilderCanvas —— 创建 / 管理世界的画布（原生 SwiftUI）。
@@ -25,6 +26,11 @@ struct WorldBuilderCanvas: View {
     @State private var placeCount = 0
     @State private var commandText = ""
     @FocusState private var commandFocused: Bool
+    @State private var lastHoverCanvas: CGPoint = .zero
+    @State private var marqueeStart: CGPoint?
+    @State private var marqueeCurrent: CGPoint?
+    @State private var zoomAnchor: CGFloat?
+    @State private var scrollMonitor: Any?
 
     init(model: AtlasAppModel, mode: String = "create", worldName: String = "未命名世界", onExit: @escaping () -> Void) {
         _model = ObservedObject(wrappedValue: model)
@@ -47,6 +53,12 @@ struct WorldBuilderCanvas: View {
         GeometryReader { proxy in
             ZStack {
                 AtlasCanvasBackground()
+                    .allowsHitTesting(false)
+
+                // 专门接住空白处点击 → 取消选中（放在卡片下面；点卡片会被卡片先接走）
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { select(nil) }
 
                 if store.projection == .map && store.showMapBase {
                     mapBase
@@ -62,14 +74,25 @@ struct WorldBuilderCanvas: View {
                 }
 
                 ForEach(store.objects) { object in
-                    NodeChip(
+                    ObjectCard(
                         object: object,
-                        selected: object.id == store.selectedID,
-                        displayName: store.displayName(object)
+                        scale: scale,
+                        selected: store.selectedIDs.contains(object.id),
+                        store: store,
+                        onSelect: { select(object.id) },
+                        onExpand: { openMapEditor(object.id) },
+                        pan: pan
                     )
                     .position(worldToScreen(object.position))
-                    .gesture(nodeDrag(object))
-                    .onTapGesture { select(object.id) }
+                }
+
+                if let rect = marqueeScreenRect {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.05))
+                        .overlay(Rectangle().stroke(Color.white.opacity(0.5), lineWidth: 1))
+                        .frame(width: rect.width, height: rect.height)
+                        .position(x: rect.midX, y: rect.midY)
+                        .allowsHitTesting(false)
                 }
 
                 if store.objects.isEmpty {
@@ -78,9 +101,22 @@ struct WorldBuilderCanvas: View {
             }
             .coordinateSpace(.named("canvas"))
             .contentShape(Rectangle())
+            .onContinuousHover(coordinateSpace: .named("canvas")) { phase in
+                if case .active(let point) = phase { lastHoverCanvas = point }
+            }
+            .gesture(marqueeGesture)
             .gesture(panGesture)
             .simultaneousGesture(magnifyGesture)
-            .onTapGesture { select(nil) }
+            .contextMenu {
+                Text("在此新建卡片")
+                ForEach(BuilderKind.creatable) { kind in
+                    Button {
+                        createCard(kind, atCanvas: lastHoverCanvas)
+                    } label: {
+                        Label(kind.title, systemImage: kind.symbol)
+                    }
+                }
+            }
             .onAppear {
                 viewSize = proxy.size
                 if !didCenter {
@@ -88,7 +124,9 @@ struct WorldBuilderCanvas: View {
                                  height: proxy.size.height / 2 - 400 * scale)
                     didCenter = true
                 }
+                startScrollMonitor()
             }
+            .onDisappear { stopScrollMonitor() }
             .onChange(of: proxy.size) { _, newValue in viewSize = newValue }
         }
     }
@@ -148,7 +186,7 @@ struct WorldBuilderCanvas: View {
             Text("一块空白的世界")
                 .font(AtlasFont.serifTitle)
                 .foregroundStyle(AtlasColor.textSecondary)
-            Text("在下面写一句话——雾港、守夜人、一场夜航……回车，它就落在这里。")
+            Text("右键画布任意处新建卡片，或在下面写一句话——雾港、守夜人、一场夜航……")
                 .font(AtlasFont.body)
                 .foregroundStyle(AtlasColor.textTertiary)
         }
@@ -198,11 +236,16 @@ struct WorldBuilderCanvas: View {
             }
             .buttonStyle(.atlas(.primary))
         }
-        .padding(AtlasSpacing.m)
-        .background(.clear)
+        .padding(.vertical, AtlasSpacing.m)
+        .padding(.trailing, AtlasSpacing.m)
+        // macOS 交通灯（红黄绿）在 .hiddenTitleBar 下仍浮于左上角，给顶栏左侧留出安全区。
+        .padding(.leading, Self.trafficLightInset)
         .overlay(alignment: .bottom) { Divider().overlay(AtlasColor.borderSubtle) }
         .background(Color.black.opacity(0.14))
     }
+
+    /// macOS 窗口控制按钮（红黄绿）占用的左上安全区宽度。
+    static let trafficLightInset: CGFloat = 82
 
     private var projectionSwitch: some View {
         HStack(spacing: 2) {
@@ -278,8 +321,7 @@ struct WorldBuilderCanvas: View {
                 // 选中态：上下文芯片 + 编号快捷建议（Agent 只递卡，采纳才作数）
                 HStack(spacing: AtlasSpacing.s) {
                     HStack(spacing: 5) {
-                        NodeGlyph(shape: object.kind.shape, symbol: object.kind.symbol, size: 16,
-                                  official: object.status == .official)
+                        NodeGlyph(shape: object.kind.shape, symbol: object.kind.symbol, size: 16)
                         Text(store.displayName(object)).font(AtlasFont.caption)
                     }
                     .foregroundStyle(AtlasColor.textSecondary)
@@ -357,8 +399,6 @@ struct WorldBuilderCanvas: View {
                 onSave: { _ in
                     // 就地生成海岸线并留在编辑器里让用户看到结果；返回由用户点“返回”触发
                     store.mapMade = true
-                    store.showMapBase = true
-                    store.projection = .map
                     store.saved = false
                     model.showToast("海岸线已生成 · 点左上返回画布")
                 }
@@ -416,29 +456,91 @@ struct WorldBuilderCanvas: View {
         withAnimation(.snappy(duration: 0.22)) { store.selectedID = id }
     }
 
-    private func nodeDrag(_ object: BuilderObject) -> some Gesture {
-        DragGesture(coordinateSpace: .named("canvas"))
-            .onChanged { value in
-                let world = screenToWorld(value.location)
-                store.move(object.id, to: world)
-                if store.selectedID != object.id { store.selectedID = object.id }
-            }
+    // 右键在指针处新建卡片
+    private func createCard(_ kind: BuilderKind, atCanvas point: CGPoint) {
+        let world = screenToWorld(point == .zero
+                                  ? CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
+                                  : point)
+        withAnimation(.snappy(duration: 0.25)) {
+            store.add(kind, at: world)
+        }
+    }
+
+    private func openMapEditor(_ id: String) {
+        store.selectedID = id
+        withAnimation(.snappy(duration: 0.3)) { showMapEditor = true }
     }
 
     private var panGesture: some Gesture {
         DragGesture()
             .onChanged { value in
+                guard marqueeStart == nil else { return }   // 框选进行中不平移
                 pan = CGSize(width: panStart.width + value.translation.width,
                              height: panStart.height + value.translation.height)
             }
             .onEnded { _ in panStart = pan }
     }
 
+    // 长按（约 0.28s）后拖动 → 框选。快速拖动则长按失败，落回平移。
+    private var marqueeGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.28)
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("canvas")))
+            .onChanged { value in
+                if case .second(true, let drag?) = value {
+                    if marqueeStart == nil { marqueeStart = drag.startLocation }
+                    marqueeCurrent = drag.location
+                    if let rect = marqueeScreenRect {
+                        store.selectInRect(screenRectToWorld(rect), additive: false)
+                    }
+                }
+            }
+            .onEnded { _ in marqueeStart = nil; marqueeCurrent = nil }
+    }
+
+    private var marqueeScreenRect: CGRect? {
+        guard let a = marqueeStart, let b = marqueeCurrent else { return nil }
+        return CGRect(x: min(a.x, b.x), y: min(a.y, b.y),
+                      width: abs(a.x - b.x), height: abs(a.y - b.y))
+    }
+
+    private func screenRectToWorld(_ rect: CGRect) -> CGRect {
+        let origin = screenToWorld(rect.origin)
+        return CGRect(x: origin.x, y: origin.y,
+                      width: rect.width / scale, height: rect.height / scale)
+    }
+
     private var magnifyGesture: some Gesture {
         MagnifyGesture()
             .onChanged { value in
-                scale = min(1.6, max(0.55, value.magnification))
+                let base = zoomAnchor ?? scale
+                if zoomAnchor == nil { zoomAnchor = scale }
+                scale = min(2.2, max(0.4, base * value.magnification))
             }
+            .onEnded { _ in zoomAnchor = nil }
+    }
+
+    // 触摸板双指滑动 → 平移；⌘ + 滑动 → 缩放。macOS 原生滚轮事件。
+    private func startScrollMonitor() {
+        guard scrollMonitor == nil else { return }
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            if showMapEditor { return event }          // 地图编辑器打开时交给它
+            if event.modifierFlags.contains(.command) {
+                let factor = 1 - event.scrollingDeltaY * 0.004
+                scale = min(2.2, max(0.4, scale * factor))
+            } else {
+                pan.width += event.scrollingDeltaX
+                pan.height += event.scrollingDeltaY
+                panStart = pan
+            }
+            return nil
+        }
+    }
+
+    private func stopScrollMonitor() {
+        if let monitor = scrollMonitor {
+            NSEvent.removeMonitor(monitor)
+            scrollMonitor = nil
+        }
     }
 
     // MARK: - 坐标变换
@@ -468,49 +570,384 @@ struct WorldBuilderCanvas: View {
     }
 }
 
-// MARK: - 画布上的对象节点
+// MARK: - 画布上的卡片（每类卡片有自己的设计；可拉角改尺寸）
 
-private struct NodeChip: View {
+private struct ObjectCard: View {
     var object: BuilderObject
+    var scale: CGFloat
     var selected: Bool
-    var displayName: String
-    @State private var hovering = false
+    @ObservedObject var store: WorldBuilderStore
+    var onSelect: () -> Void
+    var onExpand: () -> Void
+
+    @State private var hoverLocal: CGPoint?
+    @State private var moveStart: CGPoint?
+    @State private var resizeStart: (center: CGPoint, size: CGSize)?
+    @State private var activeCorner: Int?          // 当前贴近的角（0左上 1右上 2左下 3右下）
+
+    var pan: CGSize
+
+    private let radius: CGFloat = 16
+    private let arcMargin: CGFloat = 22            // 弧线画布向外扩，好让弧落在圆角外面
+    private let cornerThreshold: CGFloat = 42      // 弧显示 与 触发改尺寸 用同一判定，保证一致
+
+    private var screenW: CGFloat { object.size.width * scale }
+    private var screenH: CGFloat { object.size.height * scale }
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: radius, style: .continuous) }
+
+    private func worldToScreen(_ p: CGPoint) -> CGPoint {
+        CGPoint(x: p.x * scale + pan.width, y: p.y * scale + pan.height)
+    }
 
     var body: some View {
-        HStack(spacing: AtlasSpacing.s) {
-            NodeGlyph(
-                shape: object.kind.shape,
-                symbol: object.kind.symbol,
-                size: selected ? 30 : 26,
-                official: object.status == .official,
-                emphasized: selected
-            )
-            .overlay(alignment: .topLeading) {
-                if object.aiAssisted {
-                    Image(systemName: "sparkle").font(.system(size: 7))
-                        .foregroundStyle(AtlasColor.textTertiary).offset(x: -2, y: -2)
+        content
+            .frame(width: screenW, height: screenH)
+            .clipShape(shape)
+            .atlasP1Glass(shape)                       // Apple 液态玻璃（星图同款 P1 玻璃）
+            .overlay(shape.stroke(selected ? Color.white.opacity(0.6) : Color.clear,
+                                  lineWidth: 1.5))
+            .overlay { cornerArcs }
+            .contentShape(shape)
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let p):
+                    hoverLocal = p
+                    activeCorner = nearestResizeCorner(p)
+                case .ended:
+                    hoverLocal = nil
+                    activeCorner = nil
+                }
+            }
+            .gesture(unifiedDrag)
+            .onTapGesture { onSelect() }
+            .contextMenu {
+                if object.kind == .map {
+                    Button { onExpand() } label: { Label("展开编辑地图", systemImage: "arrow.up.left.and.arrow.down.right") }
+                }
+                Button { onSelect() } label: { Label("编辑详情", systemImage: "pencil") }
+                Button { store.bringToFront(object.id) } label: { Label("置于顶层", systemImage: "square.3.layers.3d.top.filled") }
+                Divider()
+                Button(role: .destructive) { store.delete(object.id) } label: { Label("删除卡片", systemImage: "trash") }
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if object.kind == .map {
+            MapCardBody(name: store.displayName(object), onExpand: onExpand)
+        } else {
+            InfoCardBody(object: object, displayName: store.displayName(object))
+        }
+    }
+
+    // 鼠标靠近角 → 角外渐显与圆角同曲率的小弧。每个角一条弧，进入/离开角区时淡入淡出。
+    private var cornerArcs: some View {
+        let m = arcMargin
+        let centers: [CGPoint] = [
+            CGPoint(x: m + radius, y: m + radius),
+            CGPoint(x: m + screenW - radius, y: m + radius),
+            CGPoint(x: m + radius, y: m + screenH - radius),
+            CGPoint(x: m + screenW - radius, y: m + screenH - radius)
+        ]
+        let startDeg: [Double] = [180, 270, 90, 0]
+        return ZStack {
+            ForEach(0..<4, id: \.self) { i in
+                CornerArcShape(center: centers[i], radius: radius + 7, startDeg: startDeg[i])
+                    .stroke(Color.white.opacity(0.95),
+                            style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
+                    .opacity(activeCorner == i ? 1 : 0)
+                    .animation(.easeOut(duration: 0.22), value: activeCorner)
+            }
+        }
+        .frame(width: screenW + 2 * m, height: screenH + 2 * m)
+        .allowsHitTesting(false)
+    }
+
+    /// 到最近角的距离小于阈值 → 返回角序号，否则 nil。弧显示与改尺寸共用同一判定。
+    private func nearestResizeCorner(_ p: CGPoint) -> Int? {
+        let corners = [CGPoint(x: 0, y: 0), CGPoint(x: screenW, y: 0),
+                       CGPoint(x: 0, y: screenH), CGPoint(x: screenW, y: screenH)]
+        var best: Int?
+        var bestDist = cornerThreshold
+        for i in 0..<4 {
+            let d = hypot(p.x - corners[i].x, p.y - corners[i].y)
+            if d < bestDist { bestDist = d; best = i }
+        }
+        return best
+    }
+
+    private func cornerSign(_ index: Int) -> (CGFloat, CGFloat) {
+        switch index {
+        case 0: return (-1, -1)
+        case 1: return (1, -1)
+        case 2: return (-1, 1)
+        default: return (1, 1)
+        }
+    }
+
+    // 单一手势：按落点判断——落在角附近=改尺寸，否则=移动。避免子手势与移动手势抢优先级。
+    private enum DragKind { case move; case resize(CGFloat, CGFloat) }
+    @State private var dragMode: DragKind?
+
+    private var unifiedDrag: some Gesture {
+        // 用稳定的 canvas 坐标系（不随卡片移动），否则 .local 空间会随卡片位移形成反馈环 → 抖动。
+        DragGesture(minimumDistance: 3, coordinateSpace: .named("canvas"))
+            .onChanged { value in
+                if dragMode == nil {
+                    // 把起点换算成卡片本地坐标，判断是否落在角上
+                    let centerScreen = worldToScreen(object.position)
+                    let localStart = CGPoint(x: value.startLocation.x - (centerScreen.x - screenW / 2),
+                                             y: value.startLocation.y - (centerScreen.y - screenH / 2))
+                    if let idx = nearestResizeCorner(localStart) {
+                        dragMode = .resize(cornerSign(idx).0, cornerSign(idx).1)
+                        resizeStart = (object.position, object.size)
+                        activeCorner = idx          // 拖动期间保持这条弧亮着
+                    } else {
+                        dragMode = .move
+                        moveStart = object.position
+                        if selected && store.selectedIDs.count > 1 { store.beginGroupDrag() }
+                    }
+                    store.bringToFront(object.id)
+                    if !selected { store.selectOnly(object.id) }
+                }
+                switch dragMode {
+                case .resize(let sx, let sy)?: applyResize(sx: sx, sy: sy, translation: value.translation)
+                case .move?: applyMove(translation: value.translation)
+                case nil: break
+                }
+            }
+            .onEnded { _ in
+                dragMode = nil; moveStart = nil; resizeStart = nil
+                activeCorner = nil
+                store.endGroupDrag()
+            }
+    }
+
+    private func applyMove(translation: CGSize) {
+        let dx = translation.width / scale, dy = translation.height / scale
+        if selected && store.selectedIDs.count > 1 {
+            store.groupDrag(by: CGSize(width: dx, height: dy))
+        } else if let start = moveStart {
+            store.move(object.id, to: CGPoint(x: start.x + dx, y: start.y + dy))
+        }
+    }
+
+    private func applyResize(sx: CGFloat, sy: CGFloat, translation: CGSize) {
+        guard let start = resizeStart else { return }
+        let dW = translation.width / scale, dH = translation.height / scale
+        let opposite = CGPoint(x: start.center.x - sx * start.size.width / 2,
+                               y: start.center.y - sy * start.size.height / 2)
+        let draggedX = start.center.x + sx * start.size.width / 2 + dW
+        let draggedY = start.center.y + sy * start.size.height / 2 + dH
+        let minS = object.kind.minSize
+        let newW = max(minS.width, (draggedX - opposite.x) * sx)
+        let newH = max(minS.height, (draggedY - opposite.y) * sy)
+        let cornerX = opposite.x + sx * newW
+        let cornerY = opposite.y + sy * newH
+        store.resize(object.id,
+                     size: CGSize(width: newW, height: newH),
+                     center: CGPoint(x: (opposite.x + cornerX) / 2, y: (opposite.y + cornerY) / 2))
+    }
+}
+
+// 角上的四分之一圆弧（与卡片圆角同曲率，落在圆角外侧一点）
+private struct CornerArcShape: Shape {
+    var center: CGPoint
+    var radius: CGFloat
+    var startDeg: Double
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addArc(center: center, radius: radius,
+                    startAngle: .degrees(startDeg), endAngle: .degrees(startDeg + 90),
+                    clockwise: false)
+        return path
+    }
+}
+
+// MARK: - 地图卡：地图底盘的预览 + 展开入口
+
+private struct MapCardBody: View {
+    var name: String
+    var onExpand: () -> Void
+
+    var body: some View {
+        ZStack {
+            // 极淡制图预览
+            Canvas { ctx, size in
+                let rects = [
+                    CGRect(x: size.width * 0.16, y: size.height * 0.26, width: size.width * 0.40, height: size.height * 0.44),
+                    CGRect(x: size.width * 0.50, y: size.height * 0.34, width: size.width * 0.34, height: size.height * 0.40)
+                ]
+                for (i, rect) in rects.enumerated() {
+                    let path = islandPath(in: rect, phase: CGFloat(i) * 0.8)
+                    ctx.fill(path, with: .color(.white.opacity(0.06)))
+                    ctx.stroke(path, with: .color(.white.opacity(0.20)), lineWidth: 1)
+                    for inset in stride(from: CGFloat(10), through: 34, by: 12) {
+                        let r = rect.insetBy(dx: inset, dy: inset * 0.6)
+                        if r.width > 14 {
+                            ctx.stroke(islandPath(in: r, phase: CGFloat(i) * 0.8 + inset * 0.02),
+                                       with: .color(.white.opacity(0.05)), lineWidth: 0.6)
+                        }
+                    }
                 }
             }
 
-            if selected || hovering {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(displayName).font(AtlasFont.label)
-                    Text(object.status.rawValue).font(AtlasFont.monoSmall)
-                        .foregroundStyle(AtlasColor.textTertiary)
+            VStack {
+                HStack(spacing: AtlasSpacing.s) {
+                    KindIcon(symbol: "map.fill")
+                    Text(name).font(AtlasFont.monoSmall).tracking(1)
+                        .foregroundStyle(AtlasColor.textSecondary)
+                    Spacer()
+                    Button(action: onExpand) {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .frame(width: 24, height: 24)
+                            .foregroundStyle(AtlasColor.textPrimary)
+                    }
+                    .buttonStyle(.plain)
+                    .background(AtlasP1Glass.darkFill, in: Circle())
+                    .overlay(Circle().stroke(AtlasColor.borderSubtle))
+                    .help("展开编辑地图")
                 }
-                .fixedSize()
-                .transition(.opacity.combined(with: .move(edge: .leading)))
+                Spacer()
+            }
+            .padding(AtlasSpacing.s)
+        }
+        .simultaneousGesture(TapGesture(count: 2).onEnded { onExpand() })
+    }
+
+    private func islandPath(in rect: CGRect, phase: CGFloat) -> Path {
+        var path = Path()
+        let samples = 36
+        for index in 0...samples {
+            let angle = CGFloat(index) / CGFloat(samples) * .pi * 2
+            let variation = 1 + 0.09 * sin(angle * 3 + phase) + 0.05 * cos(angle * 5 - phase)
+            let point = CGPoint(x: rect.midX + cos(angle) * rect.width * 0.5 * variation,
+                                y: rect.midY + sin(angle) * rect.height * 0.5 * variation)
+            index == 0 ? path.move(to: point) : path.addLine(to: point)
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+
+// MARK: - 普通对象卡：随类型微调设计
+
+private struct InfoCardBody: View {
+    var object: BuilderObject
+    var displayName: String
+
+    private enum Tier { case compact, regular, large }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let w = proxy.size.width, h = proxy.size.height
+            let tier: Tier = (w < 176 || h < 116) ? .compact : (w < 300 ? .regular : .large)
+            layout(tier)
+                .padding(pad(tier))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    @ViewBuilder
+    private func layout(_ tier: Tier) -> some View {
+        // 内容始终聚在左上角成组，底部用 Spacer 兜住，避免极端长宽比时被撑到两端。
+        switch tier {
+        case .compact:
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    KindIcon(symbol: object.kind.symbol, size: 20)
+                    Spacer(minLength: 0)
+                    if object.aiAssisted {
+                        Image(systemName: "sparkle").font(.system(size: 8))
+                            .foregroundStyle(AtlasColor.textTertiary)
+                    }
+                }
+                Text(displayName)
+                    .font(nameFont(tier))
+                    .foregroundStyle(AtlasColor.textPrimary)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.85)
+                Spacer(minLength: 0)
+            }
+        default:
+            VStack(alignment: .leading, spacing: tier == .large ? AtlasSpacing.s : 6) {
+                HStack(spacing: AtlasSpacing.s) {
+                    KindIcon(symbol: object.kind.symbol, size: tier == .large ? 26 : 24)
+                    Text(object.kind.title)
+                        .font(AtlasFont.monoSmall).tracking(1)
+                        .foregroundStyle(AtlasColor.textTertiary)
+                    Spacer(minLength: 0)
+                    if object.aiAssisted {
+                        Image(systemName: "sparkle").font(.system(size: 8))
+                            .foregroundStyle(AtlasColor.textTertiary)
+                    }
+                }
+
+                Text(displayName)
+                    .font(nameFont(tier))
+                    .foregroundStyle(AtlasColor.textPrimary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.9)
+
+                if object.summary.isEmpty {
+                    Text(object.kind.hint)
+                        .font(AtlasFont.caption)
+                        .foregroundStyle(AtlasColor.textTertiary)
+                        .lineLimit(tier == .large ? 2 : 1)
+                } else {
+                    Text(object.summary)
+                        .font(tier == .large ? AtlasFont.body : AtlasFont.caption)
+                        .foregroundStyle(AtlasColor.textSecondary)
+                        .lineLimit(tier == .large ? 5 : 2)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer(minLength: 0)
             }
         }
-        .foregroundStyle(AtlasColor.textPrimary)
-        .padding(5)
-        .background {
-            if selected || hovering {
-                Color.clear.atlasGlass(Capsule())
+    }
+
+    private func pad(_ tier: Tier) -> CGFloat {
+        switch tier {
+        case .compact: return 11
+        case .regular: return AtlasSpacing.m
+        case .large:   return AtlasSpacing.l
+        }
+    }
+
+    private func nameFont(_ tier: Tier) -> Font {
+        if object.kind == .note {
+            switch tier {
+            case .compact: return AtlasFont.body
+            case .regular: return .system(size: 16)
+            case .large:   return .system(size: 19)
             }
         }
-        .animation(.snappy(duration: 0.18), value: hovering)
-        .onHover { hovering = $0 }
+        switch tier {
+        case .compact: return AtlasFont.serif(15, weight: .medium)
+        case .regular: return AtlasFont.serif(20, weight: .medium)
+        case .large:   return AtlasFont.serif(26, weight: .medium)
+        }
+    }
+}
+
+// MARK: - 统一的类型图标容器
+// 所有卡片类型共用同一个图标外壳（固定圆角方形），只有里面的 SF Symbol 不同。
+
+struct KindIcon: View {
+    var symbol: String
+    var size: CGFloat = 24
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size * 0.46, weight: .semibold))
+            .foregroundStyle(AtlasColor.textPrimary)
+            .frame(width: size, height: size)
+            .background(Color.white.opacity(0.10),
+                        in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(AtlasColor.borderSubtle))
     }
 }
 
@@ -520,19 +957,17 @@ struct NodeGlyph: View {
     var shape: BuilderShape
     var symbol: String
     var size: CGFloat
-    var official: Bool = false
     var emphasized: Bool = false
 
     var body: some View {
         ZStack {
             glyphShape
-                .fill(emphasized ? Color.white : Color(white: official ? 0.82 : 0.30))
+                .fill(emphasized ? Color.white : Color(white: 0.42))
             glyphShape
-                .stroke(official ? Color.white.opacity(0.9) : Color.white.opacity(0.4),
-                        style: .init(lineWidth: official ? 1.2 : 1, dash: official ? [] : [3, 3]))
+                .stroke(Color.white.opacity(0.5), lineWidth: 1)
             Image(systemName: symbol)
                 .font(.system(size: size * 0.42, weight: .semibold))
-                .foregroundStyle(emphasized ? AtlasColor.inverse : (official ? AtlasColor.inverse : AtlasColor.textPrimary))
+                .foregroundStyle(emphasized ? AtlasColor.inverse : AtlasColor.textPrimary)
         }
         .frame(width: size, height: size)
         .shadow(color: .black.opacity(0.5), radius: 4, y: 2)
@@ -585,8 +1020,7 @@ private struct DetailCard: View {
                     }
                 } label: {
                     HStack(spacing: AtlasSpacing.s) {
-                        NodeGlyph(shape: object.kind.shape, symbol: object.kind.symbol, size: 22,
-                                  official: object.status == .official)
+                        NodeGlyph(shape: object.kind.shape, symbol: object.kind.symbol, size: 22)
                         Text(object.kind.title).font(AtlasFont.caption)
                         Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
                     }
@@ -613,38 +1047,23 @@ private struct DetailCard: View {
                     .overlay(RoundedRectangle(cornerRadius: AtlasRadius.control).stroke(AtlasColor.borderSubtle))
             }
 
-            VStack(alignment: .leading, spacing: AtlasSpacing.xs) {
-                Text("状态").font(AtlasFont.caption).foregroundStyle(AtlasColor.textTertiary)
-                Picker("", selection: $object.status) {
-                    ForEach(BuilderStatus.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-            }
-
-            VStack(alignment: .leading, spacing: AtlasSpacing.xs) {
-                Text("档案内容").font(AtlasFont.caption).foregroundStyle(AtlasColor.textTertiary)
-                TextEditor(text: $object.summary)
-                    .font(AtlasFont.body)
-                    .foregroundStyle(AtlasColor.textPrimary)
-                    .scrollContentBackground(.hidden)
-                    .frame(height: 120)
-                    .padding(AtlasSpacing.s)
-                    .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: AtlasRadius.control))
-                    .overlay(RoundedRectangle(cornerRadius: AtlasRadius.control).stroke(AtlasColor.borderSubtle))
-                    .overlay(alignment: .topLeading) {
-                        if object.summary.isEmpty {
-                            Text("在这里补充这个\(object.kind.title)的设定……")
-                                .font(AtlasFont.body)
-                                .foregroundStyle(AtlasColor.textTertiary)
-                                .padding(AtlasSpacing.s)
-                                .padding(.top, 2)
-                                .allowsHitTesting(false)
-                        }
+            ScrollView {
+                VStack(alignment: .leading, spacing: AtlasSpacing.l) {
+                    VStack(alignment: .leading, spacing: AtlasSpacing.xs) {
+                        Text("档案内容").font(AtlasFont.caption).foregroundStyle(AtlasColor.textTertiary)
+                        BuilderMentionEditor(object: $object, store: store)
                     }
-            }
 
-            Spacer()
+                    // 关联区：结构性 / 关系性 link（地图/规则/便签无关联字段，不显示）
+                    if !BuilderLinkRules.fields(for: object.kind).isEmpty {
+                        Divider().overlay(AtlasColor.borderSubtle)
+                        BuilderLinkSection(object: object, store: store)
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+
+            Spacer(minLength: AtlasSpacing.s)
 
             Button(role: .destructive) { onDelete() } label: {
                 AtlasButtonLabel(title: "从画布移除", systemImage: "trash")
