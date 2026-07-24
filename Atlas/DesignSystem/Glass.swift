@@ -16,10 +16,10 @@ enum AtlasP1Glass {
     static let compactControlSize: CGFloat = 42
     static let controlIconSize: CGFloat = 18
     static let prominentIconSize: CGFloat = 21
-    static let darkFill = Color.black.opacity(0.18)
-    static let edge = Color.white.opacity(0.24)
-    static let topHighlight = Color.white.opacity(0.32)
-    static let bottomShade = Color.white.opacity(0.08)
+    static let darkFill = Color.black.opacity(0.045)
+    static let edge = Color.white.opacity(0.42)
+    static let topHighlight = Color.white.opacity(0.78)
+    static let bottomShade = Color.white.opacity(0.03)
 }
 
 // MARK: - 玻璃表面修饰器
@@ -39,16 +39,21 @@ struct AtlasGlassSurface<S: Shape>: ViewModifier {
                 in: shape
             )
         } else {
-            // 降级：材质 + 边缘高光，尽量贴近玻璃观感
+            // 降级：不用系统磨砂材质，保留透明折光轮廓，避免灰蒙蒙的 frosted 外观。
             content
-                .background(.ultraThinMaterial, in: shape)
-                .overlay(shape.stroke(AtlasColor.borderDefault, lineWidth: 1))
+                .background(Color.white.opacity(clear ? 0.018 : 0.032), in: shape)
+                .overlay(shape.stroke(Color.white.opacity(0.34), lineWidth: 0.8))
+                .overlay(alignment: .top) {
+                    shape.stroke(Color.white.opacity(0.62), lineWidth: 0.7)
+                        .mask(LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .center))
+                }
+                .shadow(color: .black.opacity(0.32), radius: 16, y: 9)
         }
     }
 
     @available(macOS 26.0, *)
     private var glassVariant: Glass {
-        var g: Glass = clear ? .clear : .regular
+        var g: Glass = .clear
         if interactive { g = g.interactive() }
         return g
     }
@@ -69,7 +74,18 @@ extension View {
         _ shape: S = Capsule(),
         interactive: Bool = false
     ) -> some View {
-        background(AtlasP1Glass.darkFill, in: shape)
+        background(
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.045),
+                    AtlasP1Glass.darkFill,
+                    Color.black.opacity(0.025)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: shape
+        )
             .atlasGlass(shape, clear: true, interactive: interactive)
             .overlay(shape.stroke(AtlasP1Glass.edge, lineWidth: 1))
             .overlay(alignment: .top) {
@@ -82,7 +98,45 @@ extension View {
                         )
                     )
             }
-            .shadow(color: .black.opacity(0.38), radius: 15, y: 8)
+            .overlay(alignment: .bottom) {
+                shape.stroke(Color.black.opacity(0.20), lineWidth: 0.8)
+                    .mask(LinearGradient(colors: [.clear, .white], startPoint: .center, endPoint: .bottom))
+            }
+            .shadow(color: .black.opacity(0.34), radius: 18, y: 10)
+    }
+
+    /// 大面积磨砂玻璃面板：给详情卡、日志面板这类长文本容器使用。
+    /// 比 P1 更实、更暗，减少背后画布对阅读的干扰。
+    func atlasFrostedPanel<S: Shape>(
+        _ shape: S = RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous),
+        interactive: Bool = false
+    ) -> some View {
+        background(
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.060),
+                    Color(red: 0.13, green: 0.13, blue: 0.15).opacity(0.56),
+                    Color.black.opacity(0.18)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: shape
+        )
+        .background(.ultraThinMaterial, in: shape)
+        .atlasGlass(shape, clear: false, interactive: interactive)
+        .overlay(shape.stroke(Color.white.opacity(0.115), lineWidth: 1))
+        .overlay(alignment: .top) {
+            shape.stroke(Color.white.opacity(0.22), lineWidth: 0.7)
+                .mask(
+                    LinearGradient(
+                        colors: [.white, .clear],
+                        startPoint: .top,
+                        endPoint: .center
+                    )
+                )
+        }
+        .shadow(color: .black.opacity(0.30), radius: 24, y: 12)
     }
 
     /// 带语义色的流动玻璃。色彩只做局部光源，文字仍保持高对比。
@@ -93,7 +147,7 @@ extension View {
     ) -> some View {
         background(
             LinearGradient(
-                colors: [tint.opacity(0.22), tint.opacity(0.05), Color.black.opacity(0.16)],
+                colors: [tint.opacity(0.16), Color.white.opacity(0.035), Color.black.opacity(0.035)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),

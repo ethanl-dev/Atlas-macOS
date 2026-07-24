@@ -95,7 +95,7 @@ enum AtlasFont {
 }
 
 // MARK: - 应用画布背景
-// 近黑 + 极淡制图网格。给玻璃提供可折射的底层纹理，同时立住"世界/地图"气质。
+// 近黑 + Lightfall 光雨。给液态玻璃提供可折射的高对比动态纹理。
 
 struct AtlasCanvasBackground: View {
     var body: some View {
@@ -106,29 +106,13 @@ struct AtlasCanvasBackground: View {
             // 与首页星图一致的彩色深空光晕；内容层仍保持高对比黑底。
             GeometryReader { proxy in
                 let size = proxy.size
-                Circle()
-                    .fill(Color(red: 0.20, green: 0.32, blue: 1.00).opacity(0.23))
-                    .frame(width: size.width * 0.55, height: size.width * 0.55)
-                    .blur(radius: 110)
-                    .offset(x: -size.width * 0.18, y: -size.height * 0.22)
-
-                Circle()
-                    .fill(Color(red: 0.72, green: 0.18, blue: 0.88).opacity(0.16))
-                    .frame(width: size.width * 0.42, height: size.width * 0.42)
-                    .blur(radius: 120)
-                    .offset(x: size.width * 0.68, y: size.height * 0.42)
-
-                Circle()
-                    .fill(Color(red: 0.10, green: 0.86, blue: 0.76).opacity(0.12))
-                    .frame(width: size.width * 0.34, height: size.width * 0.34)
-                    .blur(radius: 100)
-                    .offset(x: size.width * 0.28, y: size.height * 0.72)
+                AtlasLightfallBackground(size: size)
             }
             .ignoresSafeArea()
             .blendMode(.plusLighter)
 
             RadialGradient(
-                colors: [Color.clear, Color.black.opacity(0.72)],
+                colors: [Color.clear, Color.black.opacity(0.30)],
                 center: .center,
                 startRadius: 40,
                 endRadius: 900
@@ -152,11 +136,123 @@ struct AtlasCanvasBackground: View {
                 while x <= size.width { path.move(to: CGPoint(x: x, y: 0)); path.addLine(to: CGPoint(x: x, y: size.height)); x += step }
                 var y: CGFloat = 0
                 while y <= size.height { path.move(to: CGPoint(x: 0, y: y)); path.addLine(to: CGPoint(x: size.width, y: y)); y += step }
-                context.stroke(path, with: .color(.white.opacity(0.022)), lineWidth: 0.5)
+                context.stroke(path, with: .color(.white.opacity(0.018)), lineWidth: 0.5)
             }
             .ignoresSafeArea()
             .blendMode(.plusLighter)
         }
         .background(AtlasColor.canvas)
+    }
+}
+
+private struct AtlasLightfallBackground: View {
+    let size: CGSize
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            ZStack {
+                Color(red: 0.015, green: 0.014, blue: 0.025)
+
+                ambientGlow(time: t)
+                tunnelGuides(time: t)
+                lightStreaks(time: t)
+            }
+            .saturation(1.18)
+            .drawingGroup()
+        }
+    }
+
+    private func ambientGlow(time: TimeInterval) -> some View {
+        ZStack {
+            Ellipse()
+                .fill(Color(red: 0.24, green: 0.11, blue: 0.64).opacity(0.22))
+                .frame(width: size.width * 0.70, height: size.height * 0.55)
+                .blur(radius: 130)
+                .offset(x: size.width * 0.56 + sin(time * 0.07) * 70,
+                        y: -size.height * 0.18 + cos(time * 0.05) * 40)
+
+            Ellipse()
+                .fill(Color(red: 0.12, green: 0.17, blue: 0.52).opacity(0.18))
+                .frame(width: size.width * 0.62, height: size.height * 0.48)
+                .blur(radius: 120)
+                .offset(x: -size.width * 0.28 + cos(time * 0.06) * 64,
+                        y: size.height * 0.16 + sin(time * 0.055) * 38)
+        }
+    }
+
+    private func tunnelGuides(time: TimeInterval) -> some View {
+        Canvas { context, canvasSize in
+            let center = CGPoint(x: canvasSize.width * 0.50, y: canvasSize.height * -0.36)
+            for index in 0..<18 {
+                let offset = CGFloat(index - 9) * canvasSize.width * 0.075
+                var path = Path()
+                path.move(to: CGPoint(x: center.x + offset * 0.22, y: -80))
+                path.addCurve(
+                    to: CGPoint(x: center.x + offset * 2.9, y: canvasSize.height + 180),
+                    control1: CGPoint(x: center.x + offset * 0.75, y: canvasSize.height * 0.22),
+                    control2: CGPoint(x: center.x + offset * 1.8, y: canvasSize.height * 0.76)
+                )
+                let opacity = index.isMultiple(of: 3) ? 0.18 : 0.08
+                context.stroke(path, with: .color(Color(red: 0.34, green: 0.12, blue: 0.92).opacity(opacity)), lineWidth: 0.7)
+            }
+        }
+        .blendMode(.plusLighter)
+    }
+
+    private func lightStreaks(time: TimeInterval) -> some View {
+        Canvas { context, canvasSize in
+            let palette = [
+                Color(red: 0.80, green: 0.70, blue: 1.00),
+                Color(red: 0.48, green: 0.18, blue: 0.92),
+                Color(red: 0.68, green: 0.50, blue: 1.00),
+                Color(red: 0.95, green: 0.91, blue: 1.00)
+            ]
+            let height = canvasSize.height
+            let width = canvasSize.width
+            let cycle = height + 620
+
+            for index in 0..<42 {
+                let seed = Double(index)
+                let xSeed = fract(sin(seed * 12.9898) * 43758.5453)
+                let speed = 165.0 + fract(sin(seed * 24.73) * 9351.17) * 250.0
+                let progress = CGFloat((time * speed + seed * 137.0).truncatingRemainder(dividingBy: Double(cycle)))
+                let yHead = progress - 360
+                let tail = CGFloat(190 + fract(sin(seed * 52.1) * 7182.2) * 260)
+                let xBase = CGFloat(xSeed) * (width * 1.18) - width * 0.09
+                let side = (xBase - width * 0.5) / max(width * 0.5, 1)
+                let curve = CGFloat(70 + fract(sin(seed * 9.8) * 2451.8) * 130) * side
+                let yTail = yHead - tail
+                let alpha = 0.42 + fract(sin(seed * 81.2) * 1917.3) * 0.42
+
+                var path = Path()
+                path.move(to: CGPoint(x: xBase + curve * 0.05, y: yTail))
+                path.addCurve(
+                    to: CGPoint(x: xBase + curve, y: yHead),
+                    control1: CGPoint(x: xBase + curve * 0.24, y: yTail + tail * 0.32),
+                    control2: CGPoint(x: xBase + curve * 0.82, y: yTail + tail * 0.76)
+                )
+
+                let color = palette[index % palette.count]
+                let gradient = Gradient(colors: [
+                    color.opacity(0),
+                    color.opacity(alpha * 0.34),
+                    Color.white.opacity(alpha),
+                ])
+                context.stroke(path, with: .linearGradient(
+                    gradient,
+                    startPoint: CGPoint(x: xBase, y: yTail),
+                    endPoint: CGPoint(x: xBase + curve, y: yHead)
+                ), style: StrokeStyle(lineWidth: index.isMultiple(of: 5) ? 1.45 : 0.92, lineCap: .round))
+
+                let tipRect = CGRect(x: xBase + curve - 1.7, y: yHead - 1.7, width: 3.4, height: 3.4)
+                context.fill(Path(ellipseIn: tipRect), with: .color(Color.white.opacity(alpha)))
+            }
+        }
+        .blendMode(.plusLighter)
+    }
+
+    private func fract(_ value: Double) -> Double {
+        value - floor(value)
     }
 }

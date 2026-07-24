@@ -164,7 +164,7 @@ struct RelationDetailCard: View {
         }
         .padding(AtlasSpacing.l)
         .frame(maxHeight: .infinity, alignment: .top)
-        .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
+        .atlasFrostedPanel(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
     }
 
     private func endpoint(_ o: BuilderObject?) -> some View {

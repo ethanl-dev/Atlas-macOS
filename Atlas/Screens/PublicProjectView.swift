@@ -11,7 +11,30 @@ struct PublicProjectView: View {
                 pageLayout
             }
         }
+        .ignoresSafeArea(.container, edges: .top)
         .background(AtlasCanvasBackground())
+        .overlay(alignment: .topLeading) {
+            exitButton
+                .padding(.top, 42)
+                .padding(.leading, 28)
+        }
+    }
+
+    private var exitButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.32)) {
+                model.navigate(to: .discover)
+            }
+        } label: {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AtlasColor.textPrimary)
+                .frame(width: 34, height: 34)
+                .contentShape(Circle())
+                .atlasP1Glass(Circle(), interactive: true)
+        }
+        .buttonStyle(.plain)
+        .help("退出企划详情")
     }
 
     private var hero: some View {

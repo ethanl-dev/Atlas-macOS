@@ -8,10 +8,13 @@
 
 /* Begin PBXFileReference section */
 		A10000000000000000000002 /* Atlas.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Atlas.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000002 /* AtlasAgentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AtlasAgentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000003 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A10000000000000000000001 /* Atlas */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Atlas; sourceTree = "<group>"; };
+		B20000000000000000000001 /* AtlasAgentTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = AtlasAgentTests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -22,14 +25,28 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B20000000000000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B20000000000000000000005 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXBuildFile section */
+		B20000000000000000000005 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* XCTest.framework */; };
+/* End PBXBuildFile section */
 
 /* Begin PBXGroup section */
 		A10000000000000000000004 = {
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000001 /* Atlas */,
+				B20000000000000000000001 /* AtlasAgentTests */,
 				A10000000000000000000005 /* Products */,
+				B20000000000000000000003 /* XCTest.framework */,
 			);
 			sourceTree = "<group>";
 		};
@@ -37,6 +54,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000002 /* Atlas.app */,
+				B20000000000000000000002 /* AtlasAgentTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -64,7 +82,45 @@
 			productReference = A10000000000000000000002 /* Atlas.app */;
 			productType = "com.apple.product-type.application";
 		};
+		B20000000000000000000006 /* AtlasAgentTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B20000000000000000000007 /* Build configuration list for PBXNativeTarget "AtlasAgentTests" */;
+			buildPhases = (
+				B20000000000000000000008 /* Sources */,
+				B20000000000000000000004 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B20000000000000000000009 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B20000000000000000000001 /* AtlasAgentTests */,
+			);
+			name = AtlasAgentTests;
+			productName = AtlasAgentTests;
+			productReference = B20000000000000000000002 /* AtlasAgentTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+		B20000000000000000000010 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000010 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000006;
+			remoteInfo = Atlas;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		B20000000000000000000009 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000006 /* Atlas */;
+			targetProxy = B20000000000000000000010 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXProject section */
 		A10000000000000000000010 /* Project object */ = {
@@ -74,9 +130,13 @@
 				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
-					A10000000000000000000006 = {
-						CreatedOnToolsVersion = 26.0;
-					};
+				A10000000000000000000006 = {
+					CreatedOnToolsVersion = 26.0;
+				};
+				B20000000000000000000006 = {
+					CreatedOnToolsVersion = 26.0;
+					TestTargetID = A10000000000000000000006;
+				};
 				};
 			};
 			buildConfigurationList = A10000000000000000000011 /* Build configuration list for PBXProject "Atlas" */;
@@ -94,6 +154,7 @@
 			projectRoot = "";
 			targets = (
 				A10000000000000000000006 /* Atlas */,
+				B20000000000000000000006 /* AtlasAgentTests */,
 			);
 		};
 /* End PBXProject section */
@@ -110,6 +171,13 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		A10000000000000000000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B20000000000000000000008 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -247,6 +315,34 @@
 			};
 			name = Release;
 		};
+		B20000000000000000000011 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.atlas.AtlasAgentTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Atlas.app/Contents/MacOS/Atlas";
+				TEST_TARGET_NAME = Atlas;
+			};
+			name = Debug;
+		};
+		B20000000000000000000012 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.atlas.AtlasAgentTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Atlas.app/Contents/MacOS/Atlas";
+				TEST_TARGET_NAME = Atlas;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -264,6 +360,15 @@
 			buildConfigurations = (
 				A10000000000000000000012 /* Debug */,
 				A10000000000000000000013 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B20000000000000000000007 /* Build configuration list for PBXNativeTarget "AtlasAgentTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B20000000000000000000011 /* Debug */,
+				B20000000000000000000012 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
