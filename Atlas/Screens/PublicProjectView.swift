@@ -174,7 +174,6 @@ struct PublicProjectView: View {
 
             persistentInfoRail
                 .frame(width: 320)
-                .compositingGroup()
                 .zIndex(10)
         }
         .background {
@@ -231,7 +230,6 @@ struct PublicProjectView: View {
                 .font(AtlasFont.heading)
 
             MiniWorldStrip(model: model)
-                .compositingGroup()
                 .zIndex(10)
         }
         .padding(AtlasSpacing.xxl)
@@ -377,7 +375,7 @@ struct PublicProjectView: View {
         }
         .padding(AtlasSpacing.l)
         .frame(maxWidth: .infinity, minHeight: 160, alignment: .topLeading)
-        .atlasP1Glass(
+        .atlasFloatingGlass(
             RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
         )
     }
@@ -442,10 +440,12 @@ private struct PublicWorldArtwork: View {
                 .scaledToFill()
             LinearGradient(
                 stops: [
-                    .init(color: .clear, location: 0.38),
-                    .init(color: .black.opacity(0.12), location: 0.60),
-                    .init(color: .black.opacity(0.40), location: 0.82),
-                    .init(color: .black.opacity(0.78), location: 1.00)
+                    .init(color: .clear, location: 0.00),
+                    .init(color: .clear, location: 0.75),
+                    .init(color: .black.opacity(0.12), location: 0.80),
+                    .init(color: .black.opacity(0.38), location: 0.88),
+                    .init(color: .black.opacity(0.66), location: 0.95),
+                    .init(color: .black.opacity(0.90), location: 1.00)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -508,7 +508,7 @@ private struct MiniWorldStrip: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(AtlasSpacing.m)
-                    .atlasP1Glass(
+                    .atlasFloatingGlass(
                         RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous),
                         interactive: true
                     )

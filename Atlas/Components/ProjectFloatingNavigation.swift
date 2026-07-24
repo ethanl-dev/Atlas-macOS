@@ -20,12 +20,7 @@ struct ProfileBrandDock: View {
             ProjectAtlasBrand(model: model)
         }
         .padding(7)
-        .atlasGlass(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.white.opacity(0.16), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.24), radius: 18, y: 8)
+        .atlasFloatingGlass(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }
 

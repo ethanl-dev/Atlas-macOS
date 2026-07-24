@@ -85,51 +85,15 @@ extension View {
             .shadow(color: .black.opacity(0.38), radius: 15, y: 8)
     }
 
-    /// 大面积内容卡片使用的 P1 液态玻璃。
-    /// 不使用按钮版的均匀深色芯层，避免大面积表面看起来像磨砂灰板。
-    func atlasP1ContentGlass<S: Shape>(
+    /// 左下角头像品牌 Dock 同款玻璃。保持原生玻璃层独立，避免 compositingGroup
+    /// 将动态折射预先栅格化成静态磨砂。
+    func atlasFloatingGlass<S: Shape>(
         _ shape: S = RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous),
         interactive: Bool = false
     ) -> some View {
-        background(
-            LinearGradient(
-                colors: [
-                    Color.black.opacity(0.08),
-                    Color.clear,
-                    Color.black.opacity(0.035)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: shape
-        )
-        .atlasGlass(shape, clear: true, interactive: interactive)
-        .overlay {
-            shape.stroke(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.56),
-                        Color(red: 0.63, green: 0.94, blue: 0.84).opacity(0.20),
-                        Color(red: 0.82, green: 0.54, blue: 0.94).opacity(0.17),
-                        Color.white.opacity(0.22)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: 1
-            )
-        }
-        .overlay(alignment: .top) {
-            shape.stroke(Color.white.opacity(0.46), lineWidth: 0.75)
-                .mask(
-                    LinearGradient(
-                        colors: [.white, .clear],
-                        startPoint: .top,
-                        endPoint: .center
-                    )
-                )
-        }
-        .shadow(color: .black.opacity(0.30), radius: 16, y: 8)
+        atlasGlass(shape, interactive: interactive)
+            .overlay(shape.stroke(Color.white.opacity(0.16), lineWidth: 1))
+            .shadow(color: .black.opacity(0.24), radius: 18, y: 8)
     }
 
     /// 带语义色的流动玻璃。色彩只做局部光源，文字仍保持高对比。
