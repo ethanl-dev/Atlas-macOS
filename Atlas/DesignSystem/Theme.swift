@@ -75,6 +75,16 @@ enum AtlasFont {
     /// 技术元数据：ID、坐标、版本、时间戳
     static let mono    = Font.system(size: 12, weight: .regular,  design: .monospaced)
     static let monoSmall = Font.system(size: 10.5, weight: .regular, design: .monospaced)
+
+    // 衬线（宋体）——仅用于"世界"级别的名字与意象，呼应星图里世界名的气质。
+    // 产品功能 UI 仍用无衬线；衬线是留给"作品"的，不是留给"界面"的。
+    static func serif(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .custom("Songti SC", size: size).weight(weight)
+    }
+    static let serifDisplay = serif(40, weight: .semibold)
+    static let serifTitle   = serif(28, weight: .medium)
+    static let serifHeading = serif(20, weight: .medium)
+    static let serifBody    = serif(16)
 }
 
 // MARK: - 应用画布背景

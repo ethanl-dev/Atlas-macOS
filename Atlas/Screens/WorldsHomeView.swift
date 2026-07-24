@@ -28,7 +28,7 @@ struct WorldsHomeView: View {
             }
             Spacer()
             Button {
-                model.activeSheet = .createWorld
+                withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = true }
             } label: {
                 AtlasButtonLabel(title: "创建世界", systemImage: "plus")
             }

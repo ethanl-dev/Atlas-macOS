@@ -118,6 +118,8 @@ final class AtlasAppModel: ObservableObject {
     @Published var activeSheet: AtlasSheet?
     @Published var toast: String?
     @Published var creationCompleted = false
+    /// 正在创建世界：全屏进入空白地图编辑器（取代旧的引导仪式流）。
+    @Published var creatingWorld = false
     @Published var joinedTaskIDs: Set<String> = []
 
     let worlds: [AtlasWorld] = [

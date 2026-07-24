@@ -2,31 +2,35 @@ import SwiftUI
 
 struct RootView: View {
     @StateObject private var model = AtlasAppModel()
-    @State private var isCreatingWorld = false
 
     var body: some View {
         Group {
-            if model.destination == .discover {
-                if isCreatingWorld {
-                    WorldCreationFlow(model: model) {
-                        withAnimation(.snappy(duration: 0.32)) {
-                            isCreatingWorld = false
-                        }
+            if model.creatingWorld {
+                // 创建世界 = 直接进入空白地图编辑器（不再有引导仪式流）
+                WorldMapCanvasView(
+                    mode: "create",
+                    onExit: {
+                        withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = false }
+                    },
+                    onSave: { _ in
+                        model.creationCompleted = true
+                        model.accessMode = .manage
+                        model.destination = .canvas
+                        withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = false }
                     }
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-                } else {
-                    DiscoverView(model: model) {
-                        withAnimation(.snappy(duration: 0.32)) {
-                            isCreatingWorld = true
-                        }
-                    }
-                    .transition(.opacity)
+                )
+                .ignoresSafeArea()
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else if model.destination == .discover {
+                DiscoverView(model: model) {
+                    withAnimation(.snappy(duration: 0.32)) { model.creatingWorld = true }
                 }
+                .transition(.opacity)
             } else {
                 projectShell
             }
         }
-        .animation(.snappy(duration: 0.32), value: isCreatingWorld)
+        .animation(.snappy(duration: 0.32), value: model.creatingWorld)
         .sheet(item: $model.activeSheet) { sheet in
             sheetView(sheet)
         }
@@ -61,7 +65,12 @@ struct RootView: View {
         case .overview:
             ProjectOverviewView(model: model)
         case .canvas:
-            WorldCanvasView(model: model)
+            WorldMapCanvasView(
+                mode: "manage",
+                onExit: { model.destination = .overview },
+                onSave: { locations in model.showToast("地图已保存 · \(locations) 个地点") }
+            )
+            .ignoresSafeArea()
         case .wiki:
             WorldWikiView(model: model)
         case .assets:
@@ -81,7 +90,8 @@ struct RootView: View {
     private func sheetView(_ sheet: AtlasSheet) -> some View {
         switch sheet {
         case .createWorld:
-            WorldCreationFlow(model: model)
+            // 创建世界已改为全屏地图编辑器（model.creatingWorld），此 sheet 不再使用。
+            EmptyView()
         case .submitWork:
             SubmitWorkSheet(model: model)
         case .publish:

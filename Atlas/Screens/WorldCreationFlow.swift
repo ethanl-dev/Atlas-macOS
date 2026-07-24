@@ -1,430 +1,489 @@
 import SwiftUI
 
+//
+//  WorldCreationFlow —— 创作仪式（不是向导）。
+//
+//  设计意图：
+//  首页星图把"每一个企划都是一个世界"讲成了一件有气质的事；
+//  创建世界不该退回成一张后台表单。这里把它重构成一次「点亮一颗世界之星」
+//  的仪式：作者命名它、注入意象、听世界回应、最后亲手点亮。
+//
+//  贯穿原则（呼应 Atlas 的立场——把创作权从 AI 手里夺回来）：
+//  · 背景是与星图同源的深空星场，作者每前进一步，星就更亮一分。
+//  · 世界名与意象用宋体（衬线），是"作品"的字，不是"界面"的字。
+//  · AI 生成的一切都叫「回声」，只是草稿；接受 / 改写 / 让它沉默，都由作者决定。
+//  · 没有 STEP 1/4 的进度感，没有"发布准备度"的仪表盘——那些是工具的语言。
+//
+
 struct WorldCreationFlow: View {
     @ObservedObject var model: AtlasAppModel
     @Environment(\.dismiss) private var dismiss
     var onClose: (() -> Void)? = nil
 
-    @State private var stage = 0
-    @State private var startKind = CreationStartKind.image
-    @State private var worldName = "雾海来信"
-    @State private var hook = "潮汐带走声音，白塔保存远航记录。"
-    @State private var projectType = "混合企"
-    @State private var allowsTextAI = true
-    @State private var skeletonStates: [String: SkeletonState] = [:]
-
-    var body: some View {
-        VStack(spacing: 0) {
-            titlebar
-            Divider().overlay(AtlasColor.borderSubtle)
-            stageContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider().overlay(AtlasColor.borderSubtle)
-            footer
+    private enum Act: Int, CaseIterable {
+        case name, image, echo, ignite
+        var overline: String {
+            switch self {
+            case .name:   return "序 · 命名"
+            case .image:  return "序 · 意象"
+            case .echo:   return "序 · 回应"
+            case .ignite: return "世界已亮"
+            }
         }
-        .frame(minWidth: 820, idealWidth: 920, minHeight: 610, idealHeight: 680)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AtlasCanvasBackground())
     }
 
+    @State private var act: Act = .name
+    @State private var glow: Double = 0.12
+
+    @State private var worldName = ""
+    @State private var hook = ""
+    @State private var origin = CreationOrigin.image
+    @State private var aiStance = AIStance.scribe
+    @State private var echoStates: [String: EchoState] = [:]
+
+    @FocusState private var nameFocused: Bool
+
+    var body: some View {
+        ZStack {
+            WorldCreationStarView(glow: glow)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                titlebar
+                Spacer(minLength: 0)
+                stagePanel
+                    .frame(maxWidth: 560)
+                    .padding(.horizontal, AtlasSpacing.xxl)
+                Spacer(minLength: 0)
+                footer
+            }
+        }
+        .frame(minWidth: 860, idealWidth: 960, minHeight: 640, idealHeight: 720)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.035, green: 0.035, blue: 0.043))
+        .onAppear { syncGlow(animated: false) }
+    }
+
+    // MARK: - 顶栏（去掉 STEP 进度，只留身份与关闭）
+
     private var titlebar: some View {
-        HStack {
+        HStack(spacing: AtlasSpacing.m) {
             AtlasMark()
-            VStack(alignment: .leading, spacing: 1) {
-                Text("创建世界")
-                    .font(AtlasFont.heading)
-                Text("STEP \(stage + 1) / 4")
-                    .font(AtlasFont.monoSmall)
-                    .foregroundStyle(AtlasColor.textTertiary)
-            }
+            Text("创世")
+                .font(AtlasFont.monoSmall)
+                .tracking(3)
+                .foregroundStyle(AtlasColor.textTertiary)
             Spacer()
-            Button {
-                close()
-            } label: {
-                Image(systemName: "xmark")
-                    .frame(width: 22, height: 22)
+            Button { close() } label: {
+                Image(systemName: "xmark").frame(width: 22, height: 22)
             }
-            .buttonStyle(.atlas(.glass))
+            .buttonStyle(.plain)
+            .foregroundStyle(AtlasColor.textPrimary)
+            .atlasP1Glass(Circle(), interactive: true)
             .help("关闭")
         }
         .padding(AtlasSpacing.l)
     }
 
+    // MARK: - 仪式面板
+
     @ViewBuilder
-    private var stageContent: some View {
-        switch stage {
-        case 0: startStage
-        case 1: intentStage
-        case 2: skeletonStage
-        default: readyStage
-        }
-    }
+    private var stagePanel: some View {
+        VStack(alignment: .leading, spacing: AtlasSpacing.l) {
+            Text(act.overline)
+                .font(AtlasFont.monoSmall)
+                .tracking(4)
+                .foregroundStyle(AtlasColor.textTertiary)
 
-    private var startStage: some View {
-        VStack(alignment: .leading, spacing: AtlasSpacing.xl) {
-            VStack(alignment: .leading, spacing: AtlasSpacing.xs) {
-                Text("从哪里开始？")
-                    .font(AtlasFont.display)
-                Text("选一个离你现在的想法最近的入口，之后都可以改变。")
-                    .font(AtlasFont.body)
-                    .foregroundStyle(AtlasColor.textSecondary)
-            }
-
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: AtlasSpacing.m),
-                GridItem(.flexible(), spacing: AtlasSpacing.m),
-                GridItem(.flexible(), spacing: AtlasSpacing.m)
-            ], spacing: AtlasSpacing.m) {
-                ForEach(CreationStartKind.allCases) { kind in
-                    Button {
-                        withAnimation(.snappy) { startKind = kind }
-                    } label: {
-                        VStack(alignment: .leading, spacing: AtlasSpacing.l) {
-                            Image(systemName: kind.symbol)
-                                .font(.system(size: 22, weight: .light))
-                            Spacer()
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(kind.title)
-                                    .font(AtlasFont.heading)
-                                Text(kind.subtitle)
-                                    .font(AtlasFont.caption)
-                                    .foregroundStyle(AtlasColor.textSecondary)
-                                    .multilineTextAlignment(.leading)
-                            }
-                        }
-                        .foregroundStyle(AtlasColor.textPrimary)
-                        .padding(AtlasSpacing.l)
-                        .frame(maxWidth: .infinity, minHeight: 148, alignment: .leading)
-                        .background(
-                            startKind == kind ? Color.white.opacity(0.10) : Color.white.opacity(0.025),
-                            in: RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous)
-                                .stroke(startKind == kind ? AtlasColor.borderStrong : AtlasColor.borderSubtle)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            Spacer()
-        }
-        .padding(AtlasSpacing.xxl)
-    }
-
-    private var intentStage: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: AtlasSpacing.xl) {
-                VStack(alignment: .leading, spacing: AtlasSpacing.xs) {
-                    Text("先写一句只有你知道为什么心动的话。")
-                        .font(AtlasFont.title)
-                    Text("Atlas 只搭骨架，正式设定始终由你确认。")
-                        .font(AtlasFont.body)
-                        .foregroundStyle(AtlasColor.textSecondary)
-                }
-
-                VStack(alignment: .leading, spacing: AtlasSpacing.xs) {
-                    Text("世界名")
-                        .font(AtlasFont.caption)
-                        .foregroundStyle(AtlasColor.textTertiary)
-                    TextField("可以稍后再取名", text: $worldName)
-                        .textFieldStyle(.plain)
-                        .font(AtlasFont.heading)
-                        .padding(AtlasSpacing.m)
-                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: AtlasRadius.control))
-                        .overlay(RoundedRectangle(cornerRadius: AtlasRadius.control).stroke(AtlasColor.borderSubtle))
-                }
-
-                VStack(alignment: .leading, spacing: AtlasSpacing.xs) {
-                    Text("一句世界意象")
-                        .font(AtlasFont.caption)
-                        .foregroundStyle(AtlasColor.textTertiary)
-                    TextEditor(text: $hook)
-                        .font(AtlasFont.body)
-                        .scrollContentBackground(.hidden)
-                        .padding(AtlasSpacing.s)
-                        .frame(height: 120)
-                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: AtlasRadius.control))
-                        .overlay(RoundedRectangle(cornerRadius: AtlasRadius.control).stroke(AtlasColor.borderSubtle))
-                }
-
-                Picker("企划类型", selection: $projectType) {
-                    ForEach(["画企", "文企", "混合企", "跑团", "长期世界"], id: \.self) {
-                        Text($0).tag($0)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                Toggle("允许 Agent 整理与校对文本", isOn: $allowsTextAI)
-                    .toggleStyle(.switch)
-                    .font(AtlasFont.body)
-
-                Spacer()
-            }
-            .padding(AtlasSpacing.xxl)
-            .frame(maxWidth: 560)
-
-            intentPreview
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.white.opacity(0.025))
-        }
-    }
-
-    private var intentPreview: some View {
-        ZStack {
-            Canvas { context, size in
-                let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                for index in 0..<5 {
-                    let angle = Double(index) / 5 * Double.pi * 2
-                    let point = CGPoint(
-                        x: center.x + cos(angle) * min(size.width, size.height) * 0.28,
-                        y: center.y + sin(angle) * min(size.width, size.height) * 0.28
-                    )
-                    var path = Path()
-                    path.move(to: center)
-                    path.addLine(to: point)
-                    context.stroke(path, with: .color(.white.opacity(0.10)), lineWidth: 1)
-                    context.fill(Path(ellipseIn: CGRect(x: point.x - 4, y: point.y - 4, width: 8, height: 8)), with: .color(.white.opacity(0.7)))
-                }
-                context.fill(Path(ellipseIn: CGRect(x: center.x - 10, y: center.y - 10, width: 20, height: 20)), with: .color(.white))
-            }
-            VStack(spacing: AtlasSpacing.xs) {
-                Text(worldName.isEmpty ? "未命名世界" : worldName)
-                    .font(AtlasFont.heading)
-                Text("骨架正在形成")
-                    .font(AtlasFont.monoSmall)
-                    .foregroundStyle(AtlasColor.textTertiary)
-                    .padding(.top, 64)
+            switch act {
+            case .name:   nameAct
+            case .image:  imageAct
+            case .echo:   echoAct
+            case .ignite: igniteAct
             }
         }
+        .padding(AtlasSpacing.xl)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+        .id(act)
     }
 
-    private var skeletonStage: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: AtlasSpacing.m) {
-                Text("原始意图")
-                    .font(AtlasFont.monoSmall)
-                    .foregroundStyle(AtlasColor.textTertiary)
-                Text(hook)
-                    .font(AtlasFont.heading)
-                    .fixedSize(horizontal: false, vertical: true)
-                Divider().overlay(AtlasColor.borderSubtle)
-                Label("这些都是草案", systemImage: "hourglass")
-                    .font(AtlasFont.caption)
-                    .foregroundStyle(AtlasColor.textSecondary)
-                Text("接受后进入待确认层，不会直接成为正式设定。")
-                    .font(AtlasFont.caption)
-                    .foregroundStyle(AtlasColor.textTertiary)
-                Spacer()
-            }
-            .padding(AtlasSpacing.xl)
-            .frame(width: 230)
-            .background(Color.white.opacity(0.025))
+    // 幕一 · 命名
+    private var nameAct: some View {
+        VStack(alignment: .leading, spacing: AtlasSpacing.l) {
+            Text("先给它一个名字。")
+                .font(AtlasFont.serifDisplay)
+                .foregroundStyle(AtlasColor.textPrimary)
+            Text("名字之后可以再改。但世界会记得，你第一次是怎么称呼它的。")
+                .font(AtlasFont.body)
+                .foregroundStyle(AtlasColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            ScrollView {
-                LazyVStack(spacing: AtlasSpacing.s) {
-                    ForEach(SkeletonSuggestion.samples) { suggestion in
-                        SkeletonRow(
-                            suggestion: suggestion,
-                            state: skeletonStates[suggestion.id] ?? .pending
-                        ) { newState in
-                            withAnimation(.snappy) {
-                                skeletonStates[suggestion.id] = newState
-                            }
+            VStack(alignment: .leading, spacing: AtlasSpacing.s) {
+                TextField("未命名世界", text: $worldName)
+                    .textFieldStyle(.plain)
+                    .font(AtlasFont.serifTitle)
+                    .foregroundStyle(AtlasColor.textPrimary)
+                    .focused($nameFocused)
+                    .onSubmit(advance)
+                Rectangle()
+                    .fill(nameFocused ? AtlasColor.borderStrong : AtlasColor.borderSubtle)
+                    .frame(height: 1)
+                    .animation(.easeOut(duration: 0.2), value: nameFocused)
+            }
+            .padding(.top, AtlasSpacing.s)
+        }
+        .onAppear { nameFocused = true }
+    }
+
+    // 幕二 · 意象
+    private var imageAct: some View {
+        VStack(alignment: .leading, spacing: AtlasSpacing.l) {
+            Text("写下那句，只有你知道为什么心动的话。")
+                .font(AtlasFont.serifTitle)
+                .foregroundStyle(AtlasColor.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("这句话是世界的种子。Atlas 只让它发芽——长成什么，始终你说了算。")
+                .font(AtlasFont.body)
+                .foregroundStyle(AtlasColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(alignment: .top, spacing: AtlasSpacing.m) {
+                Rectangle()
+                    .fill(AtlasColor.borderStrong)
+                    .frame(width: 2)
+                    .frame(maxHeight: .infinity)
+                TextEditor(text: $hook)
+                    .font(AtlasFont.serifBody)
+                    .foregroundStyle(AtlasColor.textPrimary)
+                    .scrollContentBackground(.hidden)
+                    .frame(height: 96)
+                    .overlay(alignment: .topLeading) {
+                        if hook.isEmpty {
+                            Text("潮汐带走声音，白塔保存远航记录……")
+                                .font(AtlasFont.serifBody)
+                                .foregroundStyle(AtlasColor.textTertiary)
+                                .allowsHitTesting(false)
+                                .padding(.top, 1)
                         }
                     }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+
+            Divider().overlay(AtlasColor.borderSubtle)
+
+            // 让它从哪里生长（次要，不喧宾夺主）
+            labeledRow("让它从哪里生长") {
+                FlowChips(
+                    items: CreationOrigin.allCases.map { ($0.id, $0.title) },
+                    selected: origin.id
+                ) { id in
+                    if let picked = CreationOrigin(rawValue: id) {
+                        withAnimation(.snappy) { origin = picked }
+                    }
                 }
-                .padding(AtlasSpacing.xl)
             }
 
-            VStack(alignment: .leading, spacing: AtlasSpacing.l) {
-                Text("发布准备度")
-                    .font(AtlasFont.heading)
-                readiness("世界气氛", value: 0.92)
-                readiness("参与方式", value: 0.68)
-                readiness("规则清晰度", value: 0.54)
-                readiness("AI / 授权", value: allowsTextAI ? 0.82 : 1)
-                readiness("公开页", value: 0.46)
-                Spacer()
-                Text("\(acceptedCount) 项已接受")
-                    .font(AtlasFont.mono)
-                    .foregroundStyle(AtlasColor.textSecondary)
+            // AI 的位置——把"授权"说成一句立场，而不是一个开关
+            labeledRow("AI 的位置") {
+                FlowChips(
+                    items: AIStance.allCases.map { ($0.id, $0.title) },
+                    selected: aiStance.id
+                ) { id in
+                    if let picked = AIStance(rawValue: id) {
+                        withAnimation(.snappy) { aiStance = picked }
+                    }
+                }
             }
-            .padding(AtlasSpacing.xl)
-            .frame(width: 210)
-            .background(Color.white.opacity(0.025))
         }
     }
 
-    private var readyStage: some View {
-        HStack(spacing: AtlasSpacing.xxl) {
-            WorldSeedPreview()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+    // 幕三 · 世界回应
+    private var echoAct: some View {
+        VStack(alignment: .leading, spacing: AtlasSpacing.l) {
+            Text("世界开始回应你。")
+                .font(AtlasFont.serifTitle)
+                .foregroundStyle(AtlasColor.textPrimary)
+            Text("这些是 Atlas 从你的意象里听到的回声。它们只是草稿——接受、改写，或让它沉默，都由你决定。")
+                .font(AtlasFont.body)
+                .foregroundStyle(AtlasColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: AtlasSpacing.l) {
-                Image(systemName: "checkmark.circle")
-                    .font(.system(size: 28, weight: .light))
-                Text("\(worldName) 已经有了第一副骨架")
-                    .font(AtlasFont.title)
-                Text("地图、Wiki、任务和公开页会使用同一套世界对象。进入后可以继续移动地点、补充规则，并从管理模式预览参与者看到的内容。")
-                    .font(AtlasFont.body)
-                    .foregroundStyle(AtlasColor.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                VStack(spacing: 0) {
-                    summaryRow("候选地点", value: "3")
-                    summaryRow("当前事件", value: "1")
-                    summaryRow("规则模块", value: "1")
-                    summaryRow("待确认风险", value: "2")
+            VStack(spacing: AtlasSpacing.s) {
+                ForEach(EchoSuggestion.samples) { suggestion in
+                    EchoRow(
+                        suggestion: suggestion,
+                        state: echoStates[suggestion.id] ?? .pending
+                    ) { newState in
+                        withAnimation(.snappy) { echoStates[suggestion.id] = newState }
+                    }
                 }
-                .padding(.vertical, AtlasSpacing.s)
-
-                Spacer()
             }
-            .frame(width: 330)
+
+            Text(confirmedCount == 0
+                 ? "还没有回声被确认——空着进入也可以，世界会等你。"
+                 : "你已经确认了 \(confirmedCount) 个回声。")
+                .font(AtlasFont.caption)
+                .foregroundStyle(AtlasColor.textTertiary)
+                .padding(.top, AtlasSpacing.xxs)
         }
-        .padding(AtlasSpacing.xxl)
     }
+
+    // 幕四 · 点亮
+    private var igniteAct: some View {
+        VStack(alignment: .leading, spacing: AtlasSpacing.l) {
+            Text("「\(displayName)」亮了。")
+                .font(AtlasFont.serifDisplay)
+                .foregroundStyle(AtlasColor.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("地图、Wiki、任务与公开页，从此共享同一片星空下的这一颗。你可以随时回来，继续让它长大。")
+                .font(AtlasFont.body)
+                .foregroundStyle(AtlasColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: AtlasSpacing.s) {
+                metaChip("候选地点 \(confirmedLocations)")
+                metaChip("事件 1")
+                metaChip("规则 1")
+                if aiStance != .none {
+                    metaChip(aiStance.title)
+                }
+            }
+            .padding(.top, AtlasSpacing.xs)
+        }
+    }
+
+    // MARK: - 底部：星座式进度 + 前进动作
 
     private var footer: some View {
         HStack {
-            if stage > 0 {
-                Button {
-                    withAnimation(.snappy) { stage -= 1 }
-                } label: {
+            if act != .name {
+                Button { retreat() } label: {
                     AtlasButtonLabel(title: "返回", systemImage: "chevron.left")
+                        .padding(.horizontal, AtlasSpacing.m)
+                        .frame(height: 34)
                 }
-                .buttonStyle(.atlas(.glass))
+                .buttonStyle(.plain)
+                .foregroundStyle(AtlasColor.textSecondary)
+                .atlasP1Glass(Capsule(), interactive: true)
             }
 
             Spacer()
+            constellation
+            Spacer()
 
-            if stage < 3 {
-                Button {
-                    withAnimation(.snappy) { stage += 1 }
-                } label: {
-                    AtlasButtonLabel(
-                        title: stage == 2 ? "生成 World Canvas" : "继续",
-                        systemImage: "arrow.right"
-                    )
-                }
-                .buttonStyle(.atlas(.primary))
-                .disabled(stage == 1 && hook.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            } else {
-                Button {
-                    model.creationCompleted = true
-                    model.accessMode = .manage
-                    model.destination = .canvas
-                    close()
-                } label: {
-                    AtlasButtonLabel(title: "进入 World Canvas", systemImage: "arrow.right")
-                }
-                .buttonStyle(.atlas(.primary))
+            Button { advance() } label: {
+                AtlasButtonLabel(title: forwardTitle, systemImage: nil)
+                    .foregroundStyle(AtlasColor.inverse)
+                    .padding(.horizontal, AtlasSpacing.m)
             }
+            .buttonStyle(.plain)
+            .frame(height: 34)
+            .background(Color.white.opacity(forwardDisabled ? 0.35 : 1),
+                       in: Capsule())
+            .disabled(forwardDisabled)
+            .animation(.easeOut(duration: 0.15), value: forwardDisabled)
         }
         .padding(AtlasSpacing.l)
     }
 
-    private var acceptedCount: Int {
-        skeletonStates.values.filter { $0 == .accepted || $0 == .rewritten }.count
+    private var constellation: some View {
+        HStack(spacing: AtlasSpacing.m) {
+            ForEach(Act.allCases, id: \.rawValue) { a in
+                Circle()
+                    .fill(Color.white.opacity(a.rawValue <= act.rawValue ? 0.95 : 0.22))
+                    .frame(width: a == act ? 7 : 5, height: a == act ? 7 : 5)
+                    .shadow(color: .white.opacity(a == act ? 0.6 : 0), radius: 5)
+                    .animation(.easeInOut(duration: 0.4), value: act)
+            }
+        }
+    }
+
+    // MARK: - 小组件
+
+    private func labeledRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: AtlasSpacing.s) {
+            Text(title)
+                .font(AtlasFont.caption)
+                .foregroundStyle(AtlasColor.textTertiary)
+            content()
+        }
+    }
+
+    private func metaChip(_ text: String) -> some View {
+        Text(text)
+            .font(AtlasFont.monoSmall)
+            .foregroundStyle(AtlasColor.textSecondary)
+            .padding(.horizontal, AtlasSpacing.s)
+            .padding(.vertical, 5)
+            .background(AtlasP1Glass.darkFill, in: Capsule())
+            .overlay(Capsule().stroke(AtlasColor.borderSubtle))
+    }
+
+    // MARK: - 逻辑
+
+    private var displayName: String {
+        worldName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未命名世界" : worldName
+    }
+
+    private var confirmedCount: Int {
+        echoStates.values.filter { $0 == .accepted || $0 == .rewritten }.count
+    }
+
+    private var confirmedLocations: Int {
+        EchoSuggestion.samples.filter { $0.type == "地点" }
+            .filter { s in
+                let st = echoStates[s.id] ?? .pending
+                return st == .accepted || st == .rewritten
+            }.count
+    }
+
+    private var forwardTitle: String {
+        switch act {
+        case .name:   return "继续"
+        case .image:  return "让世界回应"
+        case .echo:   return "点亮世界"
+        case .ignite: return "进入这个世界"
+        }
+    }
+
+    private var forwardDisabled: Bool {
+        act == .image && hook.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func advance() {
+        if forwardDisabled { return }
+        switch act {
+        case .name:
+            transition(to: .image)
+        case .image:
+            transition(to: .echo)
+        case .echo:
+            transition(to: .ignite)
+        case .ignite:
+            enterWorld()
+        }
+    }
+
+    private func retreat() {
+        guard let prev = Act(rawValue: act.rawValue - 1) else { return }
+        transition(to: prev)
+    }
+
+    private func transition(to next: Act) {
+        withAnimation(.easeInOut(duration: 0.5)) { act = next }
+        withAnimation(.easeInOut(duration: 1.2)) { glow = glowValue(for: next) }
+    }
+
+    private func syncGlow(animated: Bool) {
+        if animated {
+            withAnimation(.easeInOut(duration: 1.2)) { glow = glowValue(for: act) }
+        } else {
+            glow = glowValue(for: act)
+        }
+    }
+
+    private func glowValue(for act: Act) -> Double {
+        switch act {
+        case .name:   return 0.14
+        case .image:  return 0.34
+        case .echo:   return 0.60
+        case .ignite: return 1.0
+        }
+    }
+
+    private func enterWorld() {
+        model.creationCompleted = true
+        model.accessMode = .manage
+        model.destination = .canvas
+        close()
     }
 
     private func close() {
-        if let onClose {
-            onClose()
-        } else {
-            dismiss()
-        }
-    }
-
-    private func readiness(_ label: String, value: Double) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text(label).font(AtlasFont.caption)
-                Spacer()
-                Text("\(Int(value * 100))%").font(AtlasFont.monoSmall)
-            }
-            ProgressView(value: value)
-                .progressViewStyle(.linear)
-                .tint(.white)
-        }
-    }
-
-    private func summaryRow(_ label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(AtlasFont.body)
-                .foregroundStyle(AtlasColor.textSecondary)
-            Spacer()
-            Text(value)
-                .font(AtlasFont.mono)
-        }
-        .padding(.vertical, AtlasSpacing.s)
-        .overlay(alignment: .bottom) {
-            Divider().overlay(AtlasColor.borderSubtle)
-        }
+        if let onClose { onClose() } else { dismiss() }
     }
 }
 
-private enum CreationStartKind: String, CaseIterable, Identifiable {
-    case image
-    case map
-    case characters
-    case event
-    case importFile
-    case blank
+// MARK: - 起点
 
+private enum CreationOrigin: String, CaseIterable, Identifiable {
+    case image, map, characters, event, importFile, blank
     var id: String { rawValue }
-
     var title: String {
         switch self {
-        case .image: return "一句世界意象"
-        case .map: return "地图底盘"
-        case .characters: return "角色群像"
-        case .event: return "事件机制"
-        case .importFile: return "导入企划书"
-        case .blank: return "空白世界"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .image: return "从一个气氛、画面或句子开始"
-        case .map: return "先确定世界发生在哪里"
-        case .characters: return "从人物关系长出世界"
-        case .event: return "先定义世界如何变化"
-        case .importFile: return "整理已有文档和资料"
-        case .blank: return "直接进入干净的 Canvas"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .image: return "quote.opening"
-        case .map: return "map"
-        case .characters: return "person.3"
-        case .event: return "bolt.horizontal"
-        case .importFile: return "square.and.arrow.down"
-        case .blank: return "circle.dashed"
+        case .image:      return "一句意象"
+        case .map:        return "一张地图"
+        case .characters: return "一群人"
+        case .event:      return "一起事件"
+        case .importFile: return "已有企划"
+        case .blank:      return "空白"
         }
     }
 }
 
-private enum SkeletonState: String {
-    case pending = "待确认"
+// MARK: - AI 的位置（把授权说成立场）
+
+private enum AIStance: String, CaseIterable, Identifiable {
+    case scribe, assist, none
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .scribe: return "只做书记员"
+        case .assist: return "可整理校对"
+        case .none:   return "完全不介入"
+        }
+    }
+}
+
+// MARK: - 横向 chip 选择器
+
+private struct FlowChips: View {
+    var items: [(String, String)]
+    var selected: String
+    var onSelect: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: AtlasSpacing.s) {
+            ForEach(items, id: \.0) { item in
+                let isOn = item.0 == selected
+                Button { onSelect(item.0) } label: {
+                    Text(item.1)
+                        .font(AtlasFont.caption)
+                        .foregroundStyle(isOn ? AtlasColor.textPrimary : AtlasColor.textSecondary)
+                        .padding(.horizontal, AtlasSpacing.m)
+                        .padding(.vertical, 6)
+                        .background(
+                            isOn ? Color.white.opacity(0.10) : AtlasP1Glass.darkFill,
+                            in: Capsule()
+                        )
+                        .overlay(
+                            Capsule().stroke(isOn ? AtlasColor.borderStrong : AtlasColor.borderSubtle)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+// MARK: - 回声（AI 草案）
+
+private enum EchoState: String {
+    case pending = "待你决定"
     case accepted = "已接受"
     case rewritten = "已改写"
-    case ignored = "暂时不用"
+    case silenced = "已沉默"
 }
 
-private struct SkeletonSuggestion: Identifiable {
+private struct EchoSuggestion: Identifiable {
     let id: String
     let type: String
     let title: String
     let detail: String
     let symbol: String
 
-    static let samples: [SkeletonSuggestion] = [
+    static let samples: [EchoSuggestion] = [
         .init(id: "location-1", type: "地点", title: "雾港",
               detail: "声音会在退潮时被海水带走。", symbol: "mappin.and.ellipse"),
         .init(id: "location-2", type: "地点", title: "白塔档案室",
@@ -433,34 +492,40 @@ private struct SkeletonSuggestion: Identifiable {
               detail: "地图无法稳定记录的危险水域。", symbol: "water.waves"),
         .init(id: "event-1", type: "事件", title: "夜航守望",
               detail: "参与者的回应决定雾港是否开放。", symbol: "bolt.horizontal.circle"),
-        .init(id: "rule-1", type: "规则", title: "AI 使用边界",
+        .init(id: "rule-1", type: "规则", title: "使用边界",
               detail: "文本只可整理；图片生成与画风模仿关闭。", symbol: "checkmark.shield")
     ]
 }
 
-private struct SkeletonRow: View {
-    var suggestion: SkeletonSuggestion
-    var state: SkeletonState
-    var onChange: (SkeletonState) -> Void
+private struct EchoRow: View {
+    var suggestion: EchoSuggestion
+    var state: EchoState
+    var onChange: (EchoState) -> Void
+
+    private var confirmed: Bool { state == .accepted || state == .rewritten }
+    private var silenced: Bool { state == .silenced }
 
     var body: some View {
         HStack(spacing: AtlasSpacing.m) {
             Image(systemName: suggestion.symbol)
-                .font(.system(size: 15, weight: .medium))
-                .frame(width: 36, height: 36)
-                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                .font(.system(size: 14, weight: .medium))
+                .frame(width: 34, height: 34)
+                .foregroundStyle(confirmed ? AtlasColor.textPrimary : AtlasColor.textSecondary)
+                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 2) {
-                HStack {
+                HStack(spacing: AtlasSpacing.s) {
                     Text(suggestion.type)
                         .font(AtlasFont.monoSmall)
                         .foregroundStyle(AtlasColor.textTertiary)
                     Text(suggestion.title)
-                        .font(AtlasFont.label)
+                        .font(AtlasFont.serifBody)
+                        .foregroundStyle(AtlasColor.textPrimary)
                 }
                 Text(suggestion.detail)
                     .font(AtlasFont.caption)
                     .foregroundStyle(AtlasColor.textSecondary)
+                    .lineLimit(1)
             }
 
             Spacer()
@@ -468,15 +533,14 @@ private struct SkeletonRow: View {
             Menu {
                 Button("接受") { onChange(.accepted) }
                 Button("改写") { onChange(.rewritten) }
-                Button("暂时不用") { onChange(.ignored) }
+                Button("让它沉默") { onChange(.silenced) }
             } label: {
                 HStack(spacing: 5) {
                     Text(state.rawValue)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
+                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
                 }
                 .font(AtlasFont.caption)
-                .foregroundStyle(state == .accepted || state == .rewritten ? AtlasColor.textPrimary : AtlasColor.textSecondary)
+                .foregroundStyle(confirmed ? AtlasColor.textPrimary : AtlasColor.textSecondary)
                 .padding(.horizontal, AtlasSpacing.s)
                 .padding(.vertical, 6)
                 .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
@@ -485,41 +549,11 @@ private struct SkeletonRow: View {
             .fixedSize()
         }
         .padding(AtlasSpacing.m)
-        .background(Color.white.opacity(0.025))
-        .overlay(alignment: .bottom) {
-            Divider().overlay(AtlasColor.borderSubtle)
-        }
-    }
-}
-
-private struct WorldSeedPreview: View {
-    var body: some View {
-        GeometryReader { proxy in
-            Canvas { context, size in
-                let center = CGPoint(x: size.width * 0.50, y: size.height * 0.48)
-                let points: [(CGPoint, String)] = [
-                    (.init(x: size.width * 0.25, y: size.height * 0.28), "雾港"),
-                    (.init(x: size.width * 0.72, y: size.height * 0.26), "白塔"),
-                    (.init(x: size.width * 0.78, y: size.height * 0.68), "失声海域"),
-                    (.init(x: size.width * 0.28, y: size.height * 0.72), "夜航守望")
-                ]
-                for (point, _) in points {
-                    var line = Path()
-                    line.move(to: center)
-                    line.addCurve(
-                        to: point,
-                        control1: CGPoint(x: center.x, y: point.y),
-                        control2: CGPoint(x: point.x, y: center.y)
-                    )
-                    context.stroke(line, with: .color(.white.opacity(0.14)), style: .init(lineWidth: 1, dash: [3, 5]))
-                    context.fill(Path(ellipseIn: CGRect(x: point.x - 5, y: point.y - 5, width: 10, height: 10)), with: .color(.white.opacity(0.8)))
-                }
-                context.fill(Path(ellipseIn: CGRect(x: center.x - 12, y: center.y - 12, width: 24, height: 24)), with: .color(.white))
-            }
-
-            Text("WORLD")
-                .font(AtlasFont.monoSmall)
-                .position(x: proxy.size.width * 0.50, y: proxy.size.height * 0.48 + 32)
-        }
+        .background(AtlasP1Glass.darkFill, in: RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous)
+                .stroke(AtlasColor.borderSubtle)
+        )
+        .opacity(silenced ? 0.4 : 1)
     }
 }

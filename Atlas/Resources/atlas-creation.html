@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Atlas · 创世</title>
+<style>
+  :root{ --bg:#09090b; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
+    -webkit-font-smoothing:antialiased}
+  #scene{position:fixed;inset:0;width:100%;height:100%;display:block}
+  /* 边缘渐暗，让浮层玻璃有可折射的深色底，并把注意力收拢到中心 */
+  #vignette{position:fixed;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse at center,transparent 46%,rgba(0,0,0,.55) 100%)}
+</style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <div id="vignette"></div>
+
+  <script src="three.min.js"></script>
+  <script>
+  /* ============================================================
+     ATLAS · 创世星场 —— 一颗正在诞生的世界之星
+     安静的深空里悬着一颗种子星；随仪式推进（glow 0→1）
+     它从一粒微尘被点亮成一颗带光晕与星云的世界。
+     ============================================================ */
+  const canvas = document.getElementById('scene');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setClearColor(0x09090b, 1);
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x09090b, 0.0016);
+  const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 3000);
+  camera.position.set(0, 0, 210);
+  camera.lookAt(0, 0, 0);
+
+  let vw = 1, vh = 1;
+  function resize(){
+    const r = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+    if(w===vw && h===vh) return;
+    vw=w; vh=h;
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+    renderer.setSize(w,h,false);
+    camera.aspect = w/h; camera.updateProjectionMatrix();
+  }
+  resize();
+  new ResizeObserver(resize).observe(document.documentElement);
+
+  /* ---------------- 背景星场 ---------------- */
+  function buildStars(count){
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(count*3);
+    const col = new Float32Array(count*3);
+    const size = new Float32Array(count);
+    const phase = new Float32Array(count);
+    const palette = [
+      [0.82,0.88,1.0],[1.0,0.95,0.85],[0.85,0.95,0.92],
+      [0.95,0.88,1.0],[0.72,0.80,1.0],[1.0,1.0,1.0]
+    ];
+    for(let i=0;i<count;i++){
+      const r = 300 + Math.pow(Math.random(),0.6)*820;
+      const th = Math.random()*Math.PI*2, ph = Math.acos(2*Math.random()-1);
+      pos[i*3]   = r*Math.sin(ph)*Math.cos(th);
+      pos[i*3+1] = r*Math.cos(ph)*0.7;
+      pos[i*3+2] = r*Math.sin(ph)*Math.sin(th);
+      const c = palette[(Math.random()*palette.length)|0];
+      const b = 0.45+Math.random()*0.5;
+      col[i*3]=c[0]*b; col[i*3+1]=c[1]*b; col[i*3+2]=c[2]*b;
+      size[i] = 1.1 + Math.pow(Math.random(),3)*4.2;
+      phase[i] = Math.random();
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    geo.setAttribute('customColor', new THREE.BufferAttribute(col,3));
+    geo.setAttribute('size', new THREE.BufferAttribute(size,1));
+    geo.setAttribute('phase', new THREE.BufferAttribute(phase,1));
+    const mat = new THREE.ShaderMaterial({
+      uniforms:{ time:{value:0} },
+      vertexShader:`
+        attribute float size; attribute vec3 customColor; attribute float phase;
+        uniform float time; varying vec3 vC;
+        void main(){
+          vC = customColor;
+          vec4 mv = modelViewMatrix * vec4(position,1.0);
+          float tw = 0.68 + 0.32*sin(time*1.2 + phase*6.2831);
+          gl_PointSize = size * tw * (300.0 / -mv.z);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader:`
+        varying vec3 vC;
+        void main(){
+          float d = length(gl_PointCoord - 0.5);
+          float a = smoothstep(0.5, 0.03, d);
+          gl_FragColor = vec4(vC, a*0.85);
+        }`,
+      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending
+    });
+    return new THREE.Points(geo, mat);
+  }
+  const stars = buildStars(2200);
+  scene.add(stars);
+
+  /* ---------------- 星云（随点亮而绽放） ---------------- */
+  function nebulaTexture(a, b){
+    const s=256, cv=document.createElement('canvas'); cv.width=cv.height=s;
+    const ctx=cv.getContext('2d');
+    const g=ctx.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);
+    g.addColorStop(0,a); g.addColorStop(0.45,b); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,s,s);
+    return new THREE.CanvasTexture(cv);
+  }
+  const nebTex = [
+    nebulaTexture('rgba(120,110,210,0.55)','rgba(70,60,150,0.20)'),
+    nebulaTexture('rgba(80,150,175,0.5)','rgba(45,95,120,0.18)'),
+    nebulaTexture('rgba(200,160,120,0.42)','rgba(120,80,60,0.15)')
+  ];
+  const nebulae = [];
+  for(let i=0;i<5;i++){
+    const m = new THREE.SpriteMaterial({ map:nebTex[i%nebTex.length], transparent:true,
+      depthWrite:false, blending:THREE.AdditiveBlending, opacity:0 });
+    const sp = new THREE.Sprite(m);
+    const ang = i/5*Math.PI*2;
+    const rr = 60 + Math.random()*90;
+    sp.position.set(Math.cos(ang)*rr, Math.sin(ang)*rr*0.7, -40-Math.random()*80);
+    const sc = 220+Math.random()*220; sp.scale.set(sc,sc,1);
+    sp.userData.base = 0.10 + Math.random()*0.12;
+    scene.add(sp); nebulae.push(sp);
+  }
+
+  /* ---------------- 种子星（世界的核心） ---------------- */
+  const glowGeo = new THREE.PlaneGeometry(1,1);
+  function glowMat(color, opacity){
+    return new THREE.ShaderMaterial({
+      uniforms:{ glowColor:{value:new THREE.Color(color)}, opacity:{value:opacity} },
+      vertexShader:`varying vec2 vUv; void main(){ vUv=uv;
+        gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+      fragmentShader:`varying vec2 vUv; uniform vec3 glowColor; uniform float opacity;
+        void main(){
+          float d=length(vUv-0.5)*2.0;
+          float core=exp(-d*d*90.0);
+          float inner=exp(-d*d*13.0);
+          float aura=exp(-d*d*3.2);
+          float alpha=min(1.0,core+inner*0.7+aura*0.2)*opacity;
+          if(alpha<0.003) discard;
+          gl_FragColor=vec4(glowColor,alpha);
+        }`,
+      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending
+    });
+  }
+  const seedColor = 0xf2f2f2;
+  const seed = new THREE.Mesh(glowGeo, glowMat(seedColor, 1.0));
+  seed.scale.set(6,6,1); scene.add(seed);
+  const seedHalo = new THREE.Mesh(glowGeo, glowMat(seedColor, 0.0));
+  seedHalo.scale.set(26,26,1); scene.add(seedHalo);
+
+  // 环绕种子的候选微粒——世界回应时浮现的"回声"
+  const motes = [];
+  for(let i=0;i<7;i++){
+    const m = new THREE.Mesh(glowGeo, glowMat(0xcdd6ff, 0.0));
+    m.userData.ang = i/7*Math.PI*2;
+    m.userData.rad = 34 + (i%3)*10;
+    m.userData.spd = 0.06 + Math.random()*0.05;
+    m.scale.set(3.4,3.4,1);
+    scene.add(m); motes.push(m);
+  }
+
+  /* ---------------- glow 状态（Swift 驱动） ---------------- */
+  let glowTarget = 0.10;   // 目标亮度 0..1
+  let glow = 0.10;         // 当前平滑值
+  let ignitePulse = 0;     // 点亮瞬间的一次性闪光
+
+  window.atlasCreation = {
+    setGlow(x){
+      const v = Math.max(0, Math.min(1, Number(x)||0));
+      if(v > glowTarget + 0.3) ignitePulse = 1.0;  // 大跳变 = 点亮
+      glowTarget = v;
+    }
+  };
+
+  /* ---------------- 主循环 ---------------- */
+  const clock = new THREE.Clock();
+  function animate(){
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.05);
+    const t = clock.elapsedTime;
+
+    glow += (glowTarget - glow) * Math.min(1, dt*3.0);
+    ignitePulse *= (1 - Math.min(1, dt*1.6));
+
+    // 相机极缓慢漂移，制造"悬浮在深空"的呼吸感
+    camera.position.x = Math.sin(t*0.05)*10;
+    camera.position.y = Math.cos(t*0.04)*7;
+    camera.lookAt(0,0,0);
+
+    stars.material.uniforms.time.value = t;
+    stars.rotation.y = t*0.006;
+
+    // 种子星：亮度、体积随 glow 成长；始终有轻微呼吸
+    const breathe = 1 + Math.sin(t*1.6)*0.06;
+    const g = glow;
+    const flash = ignitePulse;
+    seed.quaternion.copy(camera.quaternion);
+    seedHalo.quaternion.copy(camera.quaternion);
+    const seedScale = (5 + g*9) * breathe * (1 + flash*0.5);
+    seed.scale.set(seedScale, seedScale, 1);
+    seed.material.uniforms.opacity.value = 0.55 + g*0.45 + flash*0.5;
+    const haloScale = (18 + g*46) * (1 + flash*0.4);
+    seedHalo.scale.set(haloScale, haloScale, 1);
+    seedHalo.material.uniforms.opacity.value = g*0.42 + flash*0.35;
+
+    // 星云绽放
+    nebulae.forEach((n,i)=>{
+      n.material.opacity = n.userData.base * g * (1 + flash*0.6);
+      n.material.rotation += 0.0006 + i*0.0001;
+    });
+
+    // 回声微粒：glow>0.4 才浮现，环绕种子缓行
+    const moteVis = Math.max(0, (g - 0.35) / 0.4);
+    motes.forEach(m=>{
+      m.userData.ang += m.userData.spd * dt;
+      const rad = m.userData.rad * (0.9 + g*0.5);
+      m.position.set(Math.cos(m.userData.ang)*rad, Math.sin(m.userData.ang)*rad*0.62, 0);
+      m.quaternion.copy(camera.quaternion);
+      m.material.uniforms.opacity.value = Math.min(0.9, moteVis) * (0.5 + Math.sin(t*2+m.userData.ang)*0.3);
+    });
+
+    renderer.render(scene, camera);
+  }
+  animate();
+  </script>
+</body>
+</html>
