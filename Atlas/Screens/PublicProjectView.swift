@@ -52,14 +52,17 @@ struct PublicProjectView: View {
         ZStack(alignment: .bottomLeading) {
             PublicWorldArtwork()
                 .frame(height: 500)
+                .zIndex(0)
 
             heroBottomFade
                 .frame(height: 500)
                 .allowsHitTesting(false)
+                .zIndex(1)
 
             heroDock
                 .padding(.horizontal, 32)
                 .padding(.bottom, 22)
+                .zIndex(10)
         }
         .frame(height: 500)
         .clipped()
@@ -163,8 +166,14 @@ struct PublicProjectView: View {
                         RoundedRectangle(cornerRadius: 16, style: .continuous),
                         interactive: true
                     )
+                    .contentShape(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    )
                 }
                 .buttonStyle(.plain)
+                .contentShape(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                )
 
                 if model.activeRole == .owner && model.canWriteActiveWorld {
                     auxiliaryHeroButton(symbol: "pencil", help: "编辑企划首页") {

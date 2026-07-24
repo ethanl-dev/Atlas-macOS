@@ -86,20 +86,18 @@ struct RootView: View {
                     }
                 }
                 .animation(.snappy(duration: 0.24), value: model.toast)
-
+        }
+        .overlay(alignment: .bottomLeading) {
             if model.destination != .canvas {
                 ProfileBrandDock(model: model)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .padding(.leading, 24)
                     .padding(.bottom, 24)
-                    .zIndex(100)
             }
-
+        }
+        .overlay(alignment: .bottomTrailing) {
             ProjectQuickMenu(model: model)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .padding(.bottom, 24)
                 .padding(.trailing, 12)
-                .zIndex(101)
         }
     }
 
