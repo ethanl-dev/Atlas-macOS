@@ -22,6 +22,23 @@ struct PublicProjectView: View {
             heroDock
                 .padding(.horizontal, 32)
                 .padding(.bottom, 22)
+
+            Button {
+                withAnimation(.snappy(duration: 0.32)) {
+                    model.destination = .discover
+                }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .atlasP1Glass(Circle(), interactive: true)
+            }
+            .buttonStyle(.plain)
+            .help("返回星图")
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.leading, 82)
+            .padding(.top, 18)
         }
         .frame(height: 500)
         .clipped()
@@ -182,13 +199,13 @@ struct PublicProjectView: View {
                         .resizable()
                         .scaledToFill()
                         .frame(width: proxy.size.width, height: proxy.size.height)
-                        .scaleEffect(1.10)
-                        .blur(radius: 34)
+                        .scaleEffect(1.06)
+                        .blur(radius: 16)
 
-                    Color.black.opacity(0.30)
+                    Color.black.opacity(0.12)
 
                     AtlasCanvasBackground()
-                        .opacity(0.58)
+                        .opacity(0.34)
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .clipped()
