@@ -20,7 +20,7 @@ struct DiscoverView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.white)
-            .atlasGlass(Capsule(), interactive: true)
+            .atlasP1Glass(Capsule(), interactive: true)
             .padding(.top, 42)
             .padding(.trailing, 28)
         }

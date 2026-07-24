@@ -11,6 +11,17 @@
 
 import SwiftUI
 
+enum AtlasP1Glass {
+    static let controlSize: CGFloat = 50
+    static let compactControlSize: CGFloat = 42
+    static let controlIconSize: CGFloat = 18
+    static let prominentIconSize: CGFloat = 21
+    static let darkFill = Color.black.opacity(0.18)
+    static let edge = Color.white.opacity(0.24)
+    static let topHighlight = Color.white.opacity(0.32)
+    static let bottomShade = Color.white.opacity(0.08)
+}
+
 // MARK: - 玻璃表面修饰器
 
 struct AtlasGlassSurface<S: Shape>: ViewModifier {
@@ -51,6 +62,27 @@ extension View {
         interactive: Bool = false
     ) -> some View {
         modifier(AtlasGlassSurface(shape: shape, clear: clear, interactive: interactive))
+    }
+
+    /// 星图 P1 玻璃：深色透明芯、清晰上缘和原生实时折射。
+    func atlasP1Glass<S: Shape>(
+        _ shape: S = Capsule(),
+        interactive: Bool = false
+    ) -> some View {
+        background(AtlasP1Glass.darkFill, in: shape)
+            .atlasGlass(shape, clear: true, interactive: interactive)
+            .overlay(shape.stroke(AtlasP1Glass.edge, lineWidth: 1))
+            .overlay(alignment: .top) {
+                shape.stroke(AtlasP1Glass.topHighlight, lineWidth: 0.7)
+                    .mask(
+                        LinearGradient(
+                            colors: [.white, .clear],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+            }
+            .shadow(color: .black.opacity(0.38), radius: 15, y: 8)
     }
 }
 
