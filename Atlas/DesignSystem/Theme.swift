@@ -196,8 +196,8 @@ private struct AtlasLightfallBackground: View {
         ZStack {
             auroraOrb(
                 colors: [
-                    Color(red: 0.12, green: 0.88, blue: 0.72).opacity(0.31),
-                    Color(red: 0.18, green: 0.46, blue: 1.0).opacity(0.14),
+                    Color(red: 0.12, green: 0.88, blue: 0.72).opacity(0.22),
+                    Color(red: 0.18, green: 0.46, blue: 1.0).opacity(0.09),
                     .clear
                 ],
                 width: 0.62,
@@ -210,8 +210,8 @@ private struct AtlasLightfallBackground: View {
 
             auroraOrb(
                 colors: [
-                    Color(red: 0.68, green: 0.20, blue: 1.0).opacity(0.25),
-                    Color(red: 1.0, green: 0.22, blue: 0.58).opacity(0.11),
+                    Color(red: 0.68, green: 0.20, blue: 1.0).opacity(0.17),
+                    Color(red: 1.0, green: 0.22, blue: 0.58).opacity(0.07),
                     .clear
                 ],
                 width: 0.54,
@@ -224,8 +224,8 @@ private struct AtlasLightfallBackground: View {
 
             auroraOrb(
                 colors: [
-                    Color(red: 0.10, green: 0.72, blue: 1.0).opacity(0.21),
-                    Color(red: 0.45, green: 1.0, blue: 0.72).opacity(0.09),
+                    Color(red: 0.10, green: 0.72, blue: 1.0).opacity(0.14),
+                    Color(red: 0.45, green: 1.0, blue: 0.72).opacity(0.055),
                     .clear
                 ],
                 width: 0.46,
@@ -329,20 +329,20 @@ private struct AtlasLightfallBackground: View {
             .blur(radius: 72)
             .rotationEffect(.degrees(rotation))
             .offset(x: x, y: y)
-            .opacity(0.30)
+            .opacity(0.21)
     }
 
     private func ambientGlow(time: TimeInterval) -> some View {
         ZStack {
             Ellipse()
-                .fill(Color(red: 0.24, green: 0.11, blue: 0.64).opacity(0.22))
+                .fill(Color(red: 0.24, green: 0.11, blue: 0.64).opacity(0.15))
                 .frame(width: size.width * 0.70, height: size.height * 0.55)
                 .blur(radius: 130)
                 .offset(x: size.width * 0.56 + sin(time * 0.07) * 70,
                         y: -size.height * 0.18 + cos(time * 0.05) * 40)
 
             Ellipse()
-                .fill(Color(red: 0.12, green: 0.17, blue: 0.52).opacity(0.18))
+                .fill(Color(red: 0.12, green: 0.17, blue: 0.52).opacity(0.12))
                 .frame(width: size.width * 0.62, height: size.height * 0.48)
                 .blur(radius: 120)
                 .offset(x: -size.width * 0.28 + cos(time * 0.06) * 64,

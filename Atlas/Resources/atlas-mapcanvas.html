@@ -278,7 +278,7 @@ input[type=range]{accent-color:#f4f4f6}
 }
 .editor-top{
   position:fixed;inset:0;z-index:110;pointer-events:none;
-  width:0;height:0;flex-basis:0;margin:0;padding:0!important;
+  width:100%;height:0;flex-basis:0;margin:0;padding:0!important;
   border:0!important;background:transparent!important;box-shadow:none!important;
 }
 .editor-title>span,.editor-history{display:none!important}
@@ -295,6 +295,7 @@ input[type=range]{accent-color:#f4f4f6}
 .editor-history{
   display:flex!important;position:fixed;left:auto;right:158px;top:24px;transform:none;
   gap:3px;padding:4px;border-radius:22px;pointer-events:auto;
+  z-index:135;
   background:linear-gradient(145deg,rgba(255,255,255,.10),rgba(12,14,22,.50));
   border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px rgba(255,255,255,.22),0 14px 34px rgba(0,0,0,.32)}
 .editor-history button{height:34px;padding:0 13px;border-radius:17px}
@@ -405,7 +406,7 @@ input[type=range]{accent-color:#f4f4f6}
 .card-copy blockquote{background:rgba(112,78,190,.16);color:#d5c4ff}
 .links-section>button{color:var(--ink)}
 .links-section>button:hover{background:rgba(255,255,255,.07)}
-.zoom-control{right:92px;bottom:24px}.legend,.legend-reopen{left:240px;bottom:24px}.scale-bar{left:224px!important;bottom:24px!important}
+.zoom-control{right:92px;bottom:24px}.legend,.legend-reopen{left:240px;bottom:24px}.scale-bar{left:176px!important;bottom:24px!important}
 .reopen-card{display:none!important}
 .editor-shell .back-button{position:fixed!important;left:24px;top:24px;z-index:120}
 .editor-shell .editor-title{padding:0}
@@ -23091,19 +23092,31 @@ input[type=range]{accent-color:#f4f4f6}
     }
     function assistedRiverPoint(p) {
       if (!riverAssistRef.current) return p;
-      const gx = Math.max(2, Math.min(GX - 3, Math.floor(p.x / W * GX)));
-      const gy = Math.max(2, Math.min(GY - 3, Math.floor(p.y / H * GY)));
-      let bx = gx, by = gy, bv = heightRef.current[gy * GX + gx];
-      for (let y = gy - 2; y <= gy + 2; y++) for (let x = gx - 2; x <= gx + 2; x++) {
+      const radius = 9;
+      const gx = Math.max(radius, Math.min(GX - radius - 1, Math.floor(p.x / W * GX)));
+      const gy = Math.max(radius, Math.min(GY - radius - 1, Math.floor(p.y / H * GY)));
+      const originHeight = heightRef.current[gy * GX + gx];
+      let bx = gx, by = gy, bestScore = originHeight;
+      for (let y = gy - radius; y <= gy + radius; y++) for (let x = gx - radius; x <= gx + radius; x++) {
+        const distance = Math.hypot(x - gx, y - gy);
+        if (distance > radius) continue;
         const v = heightRef.current[y * GX + x];
-        if (v < bv) {
-          bv = v;
+        const score = v + distance * 0.0007;
+        if (score < bestScore) {
+          bestScore = score;
           bx = x;
           by = y;
         }
       }
       const low = { x: (bx + 0.5) * W / GX, y: (by + 0.5) * H / GY };
-      const assisted = { x: p.x * 0.55 + low.x * 0.45, y: p.y * 0.55 + low.y * 0.45 };
+      let assisted = { x: p.x * 0.26 + low.x * 0.74, y: p.y * 0.26 + low.y * 0.74 };
+      const previous = activePath.current[activePath.current.length - 1];
+      if (previous) {
+        assisted = {
+          x: previous.x + (assisted.x - previous.x) * 0.72,
+          y: previous.y + (assisted.y - previous.y) * 0.72
+        };
+      }
       return onLand(assisted) ? assisted : p;
     }
     (0, import_react.useEffect)(() => {
