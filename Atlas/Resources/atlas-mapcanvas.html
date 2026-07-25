@@ -314,6 +314,103 @@ input[type=range]{accent-color:#f4f4f6}
   .editor-top{margin:8px 8px 0;width:calc(100% - 16px)}
   .editor-body{padding:8px;gap:8px}
 }
+
+/* —— 无界地图查看页：只保留地图与悬浮玻璃控件 —— */
+.desktop{padding:0!important;background:#06070b!important}
+.app-window{
+  width:100%!important;height:100%!important;max-width:none!important;
+  border-radius:0!important;background:transparent!important;box-shadow:none!important}
+.topbar{
+  position:absolute!important;inset:0 0 auto 0!important;height:0!important;min-height:0!important;
+  padding:0!important;background:transparent!important;box-shadow:none!important;
+  pointer-events:none;z-index:90}
+.brand,.document-state,.top-actions .avatar{display:none!important}
+.top-actions{position:static!important;pointer-events:none}
+.top-actions button{pointer-events:auto}
+.top-actions .text-button:nth-of-type(1){
+  display:block!important;position:fixed;left:24px;top:24px;width:44px;height:44px;
+  padding:0;border-radius:50%;font-size:0;color:white;
+  background:linear-gradient(145deg,rgba(255,255,255,.14),rgba(12,14,22,.44))!important;
+  border:1px solid rgba(255,255,255,.24);
+  box-shadow:inset 0 1px rgba(255,255,255,.34),0 14px 36px rgba(0,0,0,.38)}
+.top-actions .text-button:nth-of-type(1):before{
+  content:"";position:absolute;left:17px;top:16px;width:9px;height:9px;
+  border-left:1.8px solid white;border-bottom:1.8px solid white;transform:rotate(45deg)}
+.top-actions .text-button:nth-of-type(2){
+  display:block!important;position:fixed;right:24px;top:24px;width:44px;height:44px;
+  padding:0;border-radius:50%;font-size:0;
+  background:linear-gradient(145deg,rgba(255,255,255,.13),rgba(12,14,22,.46))!important;
+  border:1px solid rgba(255,255,255,.22);
+  box-shadow:inset 0 1px rgba(255,255,255,.30),0 14px 36px rgba(0,0,0,.36)}
+.top-actions .text-button:nth-of-type(2):before{
+  content:"";position:absolute;left:13px;top:12px;width:12px;height:12px;
+  border:1.8px solid white;border-radius:50%}
+.top-actions .text-button:nth-of-type(2):after{
+  content:"";position:absolute;left:26px;top:26px;width:8px;height:1.8px;
+  border-radius:2px;background:white;transform:rotate(45deg);transform-origin:left center}
+.top-actions:has(.edit-map-button) .text-button:nth-of-type(2){right:154px}
+.top-actions .text-button:nth-of-type(3){display:none!important}
+.edit-map-button{
+  display:block!important;position:fixed;right:24px;top:24px;height:44px;
+  margin:0;padding:0 18px;border-radius:22px;
+  color:#fff!important;background:linear-gradient(135deg,rgba(116,77,210,.42),rgba(32,173,137,.24))!important;
+  border:1px solid rgba(255,255,255,.25);
+  box-shadow:inset 0 1px rgba(255,255,255,.34),0 14px 36px rgba(0,0,0,.38)!important}
+.workspace{width:100%;height:100%;background:transparent!important}
+.rail{
+  position:fixed!important;left:50%!important;top:24px!important;transform:translateX(-50%);
+  width:auto!important;height:44px!important;min-width:0!important;flex:0 0 auto!important;
+  padding:4px!important;border-radius:22px!important;overflow:visible!important;
+  background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(12,14,22,.48))!important;
+  border:1px solid rgba(255,255,255,.20);
+  box-shadow:inset 0 1px rgba(255,255,255,.28),0 14px 38px rgba(0,0,0,.36)!important;
+  z-index:88}
+.rail>div:first-child{display:flex;align-items:center;gap:3px}
+.rail-label,.rail-bottom{display:none!important}
+.rail-item{
+  width:auto!important;height:34px!important;padding:0 14px!important;border-radius:17px!important;
+  color:rgba(255,255,255,.62)!important;white-space:nowrap}
+.rail-item.active{
+  background:rgba(255,255,255,.14)!important;color:#fff!important;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)!important}
+.rail-glyph{display:none!important}
+.map-wrap{width:100%;height:100%;background:#315f7a!important}
+.map-title{display:none!important}
+.legend,.legend-reopen,.zoom-control,.reopen-card,.detail-panel,.mode-notice{
+  color:var(--ink);
+  background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(14,16,23,.58))!important;
+  -webkit-backdrop-filter:blur(24px) saturate(1.2);backdrop-filter:blur(24px) saturate(1.2);
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow:inset 0 1px rgba(255,255,255,.22),0 18px 46px rgba(0,0,0,.38)!important}
+.detail-panel{top:84px;right:16px;height:calc(100% - 100px);border-radius:22px;overflow:hidden}
+.panel-header,.card-footer{background:rgba(14,16,23,.46)!important}
+.card-scroll{background:rgba(9,10,15,.50)}
+.card-copy blockquote{background:rgba(112,78,190,.16);color:#d5c4ff}
+.links-section>button{color:var(--ink)}
+.links-section>button:hover{background:rgba(255,255,255,.07)}
+.zoom-control{right:18px;bottom:18px}.legend{left:18px;bottom:18px}
+.mode-notice{top:82px;color:#fff}
+.map-search-panel{
+  position:fixed;right:24px;top:78px;z-index:110;width:min(360px,calc(100vw - 48px));
+  padding:10px;border-radius:20px;
+  background:linear-gradient(145deg,rgba(255,255,255,.14),rgba(12,14,22,.72));
+  -webkit-backdrop-filter:blur(28px) saturate(1.25);backdrop-filter:blur(28px) saturate(1.25);
+  border:1px solid rgba(255,255,255,.22);
+  box-shadow:inset 0 1px rgba(255,255,255,.30),0 24px 60px rgba(0,0,0,.48);
+  animation:atlasEditorArrive .28s cubic-bezier(.16,1,.3,1) both}
+.map-search-panel input{
+  width:100%;height:42px;border:0;outline:0;border-radius:13px;padding:0 14px;
+  color:#fff;background:rgba(255,255,255,.08);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.13);font:12px inherit}
+.map-search-panel input::placeholder{color:rgba(255,255,255,.42)}
+.map-search-panel>div{max-height:330px;overflow:auto;padding-top:6px}
+.map-search-panel>div button{
+  width:100%;min-height:48px;border:0;border-radius:12px;padding:7px 10px;
+  display:grid;grid-template-columns:8px 1fr;align-items:center;gap:10px;text-align:left;
+  color:#fff;background:transparent;cursor:pointer}
+.map-search-panel>div button:hover{background:rgba(255,255,255,.09)}
+.map-search-panel>div i{width:8px;height:8px;border-radius:50%}
+.map-search-panel>div b{display:block;font-size:11px}.map-search-panel>div small{display:block;margin-top:3px;color:rgba(255,255,255,.45);font-size:9px}
 #root{width:100%;height:100%}
 </style></head><body><div id="root"></div><script>
 "use strict";
@@ -24124,6 +24221,8 @@ input[type=range]{accent-color:#f4f4f6}
     const canEdit = window.ATLAS_CAN_EDIT !== false;
     const [editorMode, setEditorMode] = (0, import_react2.useState)(window.ATLAS_MODE === "create" || window.ATLAS_MODE === "edit");
     const [libraryView, setLibraryView] = (0, import_react2.useState)("map");
+    const [searchOpen, setSearchOpen] = (0, import_react2.useState)(false);
+    const [searchQuery, setSearchQuery] = (0, import_react2.useState)("");
     const [assets, setAssets] = (0, import_react2.useState)([]);
     const [savedMap, setSavedMap] = (0, import_react2.useState)(() => window.ATLAS_INITIAL_MAP ?? emptyMap());
     const [hasCreatedMap, setHasCreatedMap] = (0, import_react2.useState)(Boolean(window.ATLAS_INITIAL_MAP));
@@ -24399,11 +24498,27 @@ input[type=range]{accent-color:#f4f4f6}
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "top-actions", children: [
           /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "text-button", onClick: () => atlasBridge({ type: "exit" }), children: "\u8FD4\u56DE\u4F01\u5212" }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "text-button", children: "\u641C\u7D22" }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "text-button", onClick: () => setSearchOpen((value) => !value), children: "\u641C\u7D22" }),
           /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "text-button", children: "\u4E16\u754C\u6863\u6848" }),
           canEdit && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "edit-map-button", onClick: () => setEditorMode(true), children: "\u7F16\u8F91\u5730\u56FE" }),
           /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "avatar", children: "\u9752" })
         ] })
+      ] }),
+      searchOpen && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "map-search-panel", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("input", { autoFocus: true, value: searchQuery, placeholder: "\u641C\u7D22\u8BBE\u5B9A\u3001\u5173\u8054\u6216\u6D3B\u52A8\u2026", onChange: (event) => setSearchQuery(event.target.value), onKeyDown: (event) => {
+          if (event.key === "Escape") setSearchOpen(false);
+        } }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { children: savedMap.annotations.filter((item) => !searchQuery.trim() || `${item.title} ${item.category} ${item.description}`.toLowerCase().includes(searchQuery.trim().toLowerCase())).slice(0, 8).map((item) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("button", { onClick: () => {
+          focusEntry(item.id);
+          setSearchOpen(false);
+          setSearchQuery("");
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("i", { style: { background: item.color } }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("b", { children: item.title || "\u672A\u547D\u540D\u6761\u76EE" }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("small", { children: item.category })
+          ] })
+        ] }, item.id)) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "workspace", children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("aside", { className: "rail", children: [

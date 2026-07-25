@@ -88,11 +88,9 @@ struct RootView: View {
                 .animation(.snappy(duration: 0.24), value: model.toast)
         }
         .overlay(alignment: .bottomLeading) {
-            if model.destination != .canvas {
-                ProfileBrandDock(model: model)
-                    .padding(.leading, 24)
-                    .padding(.bottom, 24)
-            }
+            ProfileBrandDock(model: model)
+                .padding(.leading, 24)
+                .padding(.bottom, 24)
         }
         .overlay(alignment: .bottomTrailing) {
             ProjectQuickMenu(model: model)

@@ -179,18 +179,84 @@ private struct AtlasLightfallBackground: View {
     let size: CGSize
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             ZStack {
                 Color(red: 0.015, green: 0.014, blue: 0.025)
 
                 ambientGlow(time: t)
-                tunnelGuides(time: t)
-                lightStreaks(time: t)
+                auroraVeils(time: t)
             }
-            .saturation(1.18)
+            .saturation(1.24)
             .drawingGroup()
         }
+    }
+
+    private func auroraVeils(time: TimeInterval) -> some View {
+        ZStack {
+            auroraRibbon(
+                colors: [
+                    Color(red: 0.16, green: 0.92, blue: 0.72),
+                    Color(red: 0.12, green: 0.55, blue: 0.96),
+                    Color.clear
+                ],
+                width: 1.26,
+                height: 0.22,
+                rotation: -12 + sin(time * 0.10) * 8,
+                x: sin(time * 0.075) * size.width * 0.15,
+                y: -size.height * 0.20 + cos(time * 0.09) * size.height * 0.10
+            )
+
+            auroraRibbon(
+                colors: [
+                    Color.clear,
+                    Color(red: 0.54, green: 0.18, blue: 0.96),
+                    Color(red: 0.92, green: 0.22, blue: 0.70)
+                ],
+                width: 1.12,
+                height: 0.28,
+                rotation: 18 + cos(time * 0.085) * 10,
+                x: size.width * 0.18 + cos(time * 0.06) * size.width * 0.13,
+                y: size.height * 0.10 + sin(time * 0.07) * size.height * 0.13
+            )
+
+            auroraRibbon(
+                colors: [
+                    Color(red: 0.18, green: 0.46, blue: 0.98),
+                    Color(red: 0.36, green: 0.96, blue: 0.72),
+                    Color.clear
+                ],
+                width: 0.92,
+                height: 0.16,
+                rotation: -32 + sin(time * 0.12) * 12,
+                x: -size.width * 0.22 + sin(time * 0.055) * size.width * 0.12,
+                y: size.height * 0.30 + cos(time * 0.08) * size.height * 0.10
+            )
+        }
+        .blendMode(.plusLighter)
+    }
+
+    private func auroraRibbon(
+        colors: [Color],
+        width: CGFloat,
+        height: CGFloat,
+        rotation: Double,
+        x: CGFloat,
+        y: CGFloat
+    ) -> some View {
+        Capsule(style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: colors,
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(width: size.width * width, height: size.height * height)
+            .blur(radius: 72)
+            .rotationEffect(.degrees(rotation))
+            .offset(x: x, y: y)
+            .opacity(0.40)
     }
 
     private func ambientGlow(time: TimeInterval) -> some View {
