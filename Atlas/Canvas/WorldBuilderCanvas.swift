@@ -1238,6 +1238,39 @@ struct WorldBuilderCanvas: View {
                 .padding(12)
                 .frame(width: 620, alignment: .leading)
                 .atlasP1Glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay {
+                    if agentIsThinking {
+                        AngularGradient(
+                            colors: [
+                                .clear,
+                                AtlasColor.auroraMint.opacity(0.18),
+                                Color.white.opacity(0.95),
+                                AtlasColor.auroraBlue.opacity(0.56),
+                                AtlasColor.auroraViolet.opacity(0.42),
+                                .clear,
+                                .clear
+                            ],
+                            center: .center
+                        )
+                        .rotationEffect(.degrees(thinkingBorderRotation))
+                        .mask(
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .stroke(lineWidth: 2.2)
+                        )
+                        .allowsHitTesting(false)
+                    }
+                }
+                .shadow(
+                    color: AtlasColor.auroraMint.opacity(
+                        agentIsThinking ? (thinkingGlowExpanded ? 0.22 : 0.06) : 0
+                    ),
+                    radius: thinkingGlowExpanded ? 25 : 8
+                )
+                .scaleEffect(
+                    agentIsThinking && !reduceMotion
+                        ? (thinkingGlowExpanded ? 1.008 : 0.998)
+                        : 1
+                )
                 .animation(.spring(response: 0.36, dampingFraction: 0.9), value: commandLineEstimate)
             }
             .padding(.bottom, AtlasSpacing.l)

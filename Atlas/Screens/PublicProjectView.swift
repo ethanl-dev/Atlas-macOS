@@ -483,11 +483,15 @@ struct PublicProjectView: View {
     }
 
     private func pulseRow(_ label: String, detail: String) -> some View {
-        HStack {
-            Text(label).font(AtlasFont.caption).foregroundStyle(AtlasColor.textTertiary)
-            Spacer()
-            Text(detail).font(AtlasFont.label)
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(AtlasFont.caption)
+                .foregroundStyle(AtlasColor.textTertiary)
+            Text(detail)
+                .font(AtlasFont.label)
+                .foregroundStyle(AtlasColor.textPrimary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func changeRow(_ title: String, time: String) -> some View {
