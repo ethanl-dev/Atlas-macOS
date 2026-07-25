@@ -1,14 +1,14 @@
 //
 //  GlassButton.swift
-//  Atlas 按钮 —— 两档：primary（白色实心，最高强调）/ glass（液态玻璃，常规）。
-//  黑白系统里"主按钮"用纯白实心制造唯一强调，其余一律玻璃。
+//  Atlas 按钮 —— 白色单色按钮系统。
+//  主按钮与常规按钮都使用白色底，依靠文字灰度与透明度区分层级。
 //
 
 import SwiftUI
 
 enum AtlasButtonKind {
-    case primary   // 白色实心，反色文字
-    case glass     // 液态玻璃
+    case primary   // 白色实心，深灰文字
+    case glass     // 白色柔和底，灰色文字
     case ghost     // 无底，仅文字（低强调）
 }
 
@@ -38,8 +38,8 @@ struct AtlasButtonStyle: ButtonStyle {
 
     private var foreground: Color {
         switch kind {
-        case .primary: return .white
-        case .glass:   return AtlasColor.textPrimary
+        case .primary: return Color(white: 0.20)
+        case .glass:   return Color(white: 0.36)
         case .ghost:   return AtlasColor.textSecondary
         }
     }
@@ -48,19 +48,11 @@ struct AtlasButtonStyle: ButtonStyle {
     private func background(shape: RoundedRectangle, pressed: Bool) -> some View {
         switch kind {
         case .primary:
-            shape.fill(
-                LinearGradient(
-                    colors: [
-                        AtlasColor.auroraBlue.opacity(pressed ? 0.76 : 0.96),
-                        AtlasColor.auroraViolet.opacity(pressed ? 0.72 : 0.90)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .shadow(color: AtlasColor.auroraBlue.opacity(0.22), radius: 12, y: 5)
+            shape.fill(Color.white.opacity(pressed ? 0.86 : 0.98))
+                .shadow(color: .black.opacity(pressed ? 0.12 : 0.20), radius: 10, y: 4)
         case .glass:
-            Color.clear.atlasChromaticGlass(shape, tint: AtlasColor.auroraBlue.opacity(0.36), interactive: true)
+            shape.fill(Color.white.opacity(pressed ? 0.78 : 0.92))
+                .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
         case .ghost:
             Color.clear
         }

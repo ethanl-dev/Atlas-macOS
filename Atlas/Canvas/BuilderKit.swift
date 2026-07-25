@@ -70,9 +70,7 @@ struct BuilderKit: Identifiable {
             .init(from: "chr2", field: "阵营归属", to: "org2"),
             // 角色 → 能力受某规则约束
             .init(from: "chr1", field: "能力边界", to: "rule1"),
-            // 地点 → 定位于地图
-            .init(from: "loc1", field: "所在地图", to: "map"),
-            .init(from: "loc2", field: "所在地图", to: "map"),
+            // 地图不参与关系图谱：地点不再连向地图（地图仅作底盘）。
             // 事件 ↔ 角色 / 地点
             .init(from: "evt1", field: "涉及角色", to: "chr1"),
             .init(from: "evt1", field: "触发地点", to: "loc1"),

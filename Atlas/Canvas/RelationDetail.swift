@@ -47,17 +47,20 @@ struct StrengthPicker: View {
         HStack(spacing: 2) {
             ForEach(RelationStrength.allCases) { s in
                 Button { strength = s } label: {
-                    HStack(spacing: 5) {
-                        Capsule()
-                            .fill(strength == s ? AtlasColor.inverse : AtlasColor.textSecondary)
-                            .frame(width: 16, height: s.lineWidth)
-                        Text(s.rawValue).font(AtlasFont.caption)
+                    ZStack {
+                        HStack(spacing: 5) {
+                            Capsule()
+                                .fill(strength == s ? AtlasColor.inverse : AtlasColor.textSecondary)
+                                .frame(width: 16, height: s.lineWidth)
+                            Text(s.rawValue).font(AtlasFont.caption)
+                        }
                     }
                     .foregroundStyle(strength == s ? AtlasColor.inverse : AtlasColor.textSecondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Capsule())
                     .background { if strength == s { Capsule().fill(Color.white) } }
                 }
+                .frame(maxWidth: .infinity)
                 .buttonStyle(.plain)
             }
         }

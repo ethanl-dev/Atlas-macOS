@@ -38,8 +38,8 @@ enum BuilderLinkRules {
                       relationalTags: ["盟友", "敌对", "师徒", "亲属"], layer: .reveal),
             ]
         case .location:
+            // 地图不参与关系图谱：地点不再「定位于地图」。地图只作为可开关的底盘。
             return [
-                .init(key: "所在地图", accepts: [.map], semantic: "定位于", relationalTags: [], layer: .pub),
                 .init(key: "关联", accepts: [.org, .event], semantic: "掌控 / 发生地", relationalTags: [], layer: .pub),
             ]
         case .org:
