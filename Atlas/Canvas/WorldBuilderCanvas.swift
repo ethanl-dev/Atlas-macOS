@@ -648,22 +648,24 @@ struct WorldBuilderCanvas: View {
             RelationDetailCard(relation: rbind, store: store) {
                 store.removeLink(rid)
             }
+            .id(rid)
             .frame(width: 300)
             .padding(.trailing, AtlasSpacing.l)
             .padding(.top, 102)
             .padding(.bottom, AtlasSpacing.l)
             .frame(maxHeight: .infinity, alignment: .top)
-            .transition(.move(edge: .trailing).combined(with: .opacity))
+            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .trailing)))
         } else if let id = store.selectedID, let bind = store.binding(for: id) {
             DetailCard(object: bind, store: store) {
                 store.delete(id)
             }
+            .id(id)
             .frame(width: 300)
             .padding(.trailing, AtlasSpacing.l)
             .padding(.top, 102)
             .padding(.bottom, AtlasSpacing.l)
             .frame(maxHeight: .infinity, alignment: .top)
-            .transition(.move(edge: .trailing).combined(with: .opacity))
+            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .trailing)))
         }
     }
 
@@ -674,6 +676,9 @@ struct WorldBuilderCanvas: View {
             assistantFloatingCard
                 .padding(.top, 112)
 
+            unlocatedMapTray
+                .padding(.top, AtlasSpacing.m)
+
             Spacer(minLength: 0)
 
             sessionTray
@@ -681,6 +686,63 @@ struct WorldBuilderCanvas: View {
         .padding(.leading, AtlasSpacing.l)
         .padding(.bottom, AtlasSpacing.l)
         .frame(maxHeight: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var unlocatedMapTray: some View {
+        let pending = store.unlocatedObjects
+        if canEdit, !pending.isEmpty {
+            VStack(alignment: .leading, spacing: AtlasSpacing.s) {
+                HStack {
+                    Label("待定位到地图", systemImage: "mappin.and.ellipse")
+                        .font(AtlasFont.label)
+                    Spacer()
+                    Text("\(pending.count)")
+                        .font(AtlasFont.monoSmall)
+                        .foregroundStyle(AtlasColor.textSecondary)
+                }
+
+                ForEach(pending.prefix(4)) { object in
+                    Button {
+                        withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
+                            showMapEditor = true
+                        }
+                    } label: {
+                        HStack(spacing: AtlasSpacing.s) {
+                            Image(systemName: object.kind.symbol)
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(store.displayName(object))
+                                    .lineLimit(1)
+                                Text(store.preferredMapPlacement(for: object).rawValue)
+                                    .font(AtlasFont.caption)
+                                    .foregroundStyle(AtlasColor.textTertiary)
+                            }
+                            Spacer()
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .font(AtlasFont.caption)
+                        .foregroundStyle(AtlasColor.textPrimary)
+                        .padding(.horizontal, AtlasSpacing.s)
+                        .frame(height: 42)
+                        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .atlasP1Glass(RoundedRectangle(cornerRadius: 12, style: .continuous), interactive: true)
+                }
+
+                if pending.count > 4 {
+                    Text("另有 \(pending.count - 4) 张卡片")
+                        .font(AtlasFont.caption)
+                        .foregroundStyle(AtlasColor.textTertiary)
+                }
+            }
+            .padding(AtlasSpacing.m)
+            .frame(width: 260)
+            .atlasP1Glass(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .leading)))
+        }
     }
 
     @ViewBuilder
@@ -1199,15 +1261,16 @@ struct WorldBuilderCanvas: View {
             WorldMapCanvasView(
                 mode: store.mapMade ? "manage" : "create",
                 canEdit: canEdit,
+                initialMapJSON: store.mapJSON,
+                pendingPlacementsJSON: store.pendingMapPlacementsJSON(),
                 onExit: {
                     withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
                         showMapEditor = false
                     }
                 },
-                onSave: { _, _ in
+                onSave: { _, mapJSON in
                     // 就地生成海岸线并留在编辑器里让用户看到结果；返回由用户点“返回”触发
-                    store.mapMade = true
-                    store.saved = false
+                    store.synchronizeMap(mapJSON)
                     model.showToast("海岸线已生成 · 点左上返回画布")
                 }
             )
@@ -1712,7 +1775,18 @@ private struct ObjectCard: View {
         content
             .frame(width: screenW, height: screenH)
             .clipShape(shape)
-            .atlasP1Glass(shape)                       // Apple 液态玻璃（星图同款 P1 玻璃）
+            .atlasFloatingGlass(shape, interactive: true)
+            .overlay {
+                shape
+                    .stroke(
+                        LinearGradient(
+                            colors: [.white.opacity(0.72), .white.opacity(0.18), .white.opacity(0.48)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
             .overlay(shape.stroke(selected ? Color.white.opacity(0.6) : Color.clear,
                                   lineWidth: 1.5))
             .overlay { cornerArcs }

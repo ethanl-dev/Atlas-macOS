@@ -277,15 +277,20 @@ input[type=range]{accent-color:#f4f4f6}
   animation:atlasEditorArrive .52s cubic-bezier(.16,1,.3,1) both;
 }
 .editor-top{
-  margin:12px 12px 0;
-  width:calc(100% - 24px);
-  height:58px;flex-basis:58px;
-  border:1px solid rgba(255,255,255,.16)!important;
-  border-radius:18px;
-  background:linear-gradient(135deg,rgba(255,255,255,.105),rgba(17,18,26,.54))!important;
-  box-shadow:inset 0 1px rgba(255,255,255,.24),0 18px 45px rgba(0,0,0,.38)!important;
+  position:fixed;inset:0;z-index:110;pointer-events:none;
+  width:0;height:0;flex-basis:0;margin:0;padding:0!important;
+  border:0!important;background:transparent!important;box-shadow:none!important;
 }
-.editor-body{padding:10px 12px 12px;gap:10px}
+.editor-title>span,.editor-history{display:none!important}
+.editor-top button{pointer-events:auto}
+.editor-actions{
+  position:fixed;right:24px;top:24px;display:flex;gap:8px;
+  padding:4px;border-radius:24px;
+  background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(12,14,22,.52));
+  border:1px solid rgba(255,255,255,.18);
+  box-shadow:inset 0 1px rgba(255,255,255,.26),0 14px 38px rgba(0,0,0,.36)}
+.editor-actions button{height:36px!important;border-radius:18px!important}
+.editor-body{padding:12px;gap:10px}
 .tool-dock{
   border:1px solid rgba(255,255,255,.13);
   border-radius:18px;
@@ -311,7 +316,6 @@ input[type=range]{accent-color:#f4f4f6}
   box-shadow:inset 0 1px rgba(255,255,255,.20),0 22px 58px rgba(0,0,0,.48)!important;
 }
 @media(max-width:1000px){
-  .editor-top{margin:8px 8px 0;width:calc(100% - 16px)}
   .editor-body{padding:8px;gap:8px}
 }
 
@@ -395,7 +399,8 @@ input[type=range]{accent-color:#f4f4f6}
 .zoom-control{right:92px;bottom:24px}.legend,.legend-reopen{left:240px;bottom:24px}.scale-bar{left:224px!important;bottom:24px!important}
 .reopen-card{display:none!important}
 .editor-shell .back-button{position:fixed!important;left:24px;top:24px;z-index:120}
-.editor-shell .editor-title{padding-left:54px}
+.editor-shell .editor-title{padding:0}
+.card-copy blockquote:empty{display:none}
 @media(max-width:760px){.legend,.legend-reopen,.scale-bar{left:18px!important;bottom:92px!important}.zoom-control{right:82px;bottom:24px}}
 .mode-notice{top:82px;color:#fff}
 .map-search-panel{
@@ -22751,9 +22756,16 @@ input[type=range]{accent-color:#f4f4f6}
       const p = { x: (x + 0.5) / nx * W, y: (y + 0.5) / ny * H }, base = sampleHeight(height, p);
       const gx = Math.min(GX - 1, Math.floor(p.x / W * GX)), gy = Math.min(GY - 1, Math.floor(p.y / H * GY)), index = gy * GX + gx, proximity = influence[index], landOwner = owner[index];
       let boundary = landOwner < 0;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const xx = gx + dx, yy = gy + dy;
-        if (xx >= 0 && xx < GX && yy >= 0 && yy < GY && owner[yy * GX + xx] >= 0 && owner[yy * GX + xx] !== landOwner) boundary = true;
+      // 在不同陆块的 Voronoi 分界处保留明确海峡。三格安全带可以抵消
+      // 噪声与等值线平滑造成的“隔海搭桥”，又不会侵蚀同一陆块的细湾。
+      for (let oy = -3; oy <= 3 && !boundary; oy++) for (let ox = -3; ox <= 3; ox++) {
+        const xx = gx + ox, yy = gy + oy;
+        if (xx < 0 || xx >= GX || yy < 0 || yy >= GY) continue;
+        const nearbyOwner = owner[yy * GX + xx];
+        if (nearbyOwner >= 0 && landOwner >= 0 && nearbyOwner !== landOwner) {
+          boundary = true;
+          break;
+        }
       }
       if (proximity === 0 || boundary) {
         values[y * nx + x] = -1e-3;
@@ -22843,6 +22855,7 @@ input[type=range]{accent-color:#f4f4f6}
     const camera = (0, import_react.useRef)({ x: 500, y: 325, zoom: 1 });
     const zoomLimits = (0, import_react.useRef)({ min: 0.65, max: 1.55 });
     const cameraInitialized = (0, import_react.useRef)(false);
+    const pendingPlacement = (0, import_react.useRef)(null);
     const pointer = (0, import_react.useRef)({ down: false, x: 0, y: 0, lastX: 0, lastY: 0, painted: false });
     const activePath = (0, import_react.useRef)([]);
     const riverEnded = (0, import_react.useRef)(false);
@@ -22859,6 +22872,7 @@ input[type=range]{accent-color:#f4f4f6}
     const strengthRef = (0, import_react.useRef)(42);
     const [worldKm, setWorldKm] = (0, import_react.useState)(initialMap?.worldKm ?? 3600);
     const [editorZoom, setEditorZoom] = (0, import_react.useState)(1);
+    const [pendingPlacements, setPendingPlacements] = (0, import_react.useState)(() => window.ATLAS_CANVAS_PENDING ?? []);
     const [setup, setSetup] = (0, import_react.useState)(!initialMap);
     const [heightOpacity, setHeightOpacity] = (0, import_react.useState)(100);
     const heightOpacityRef = (0, import_react.useRef)(100);
@@ -23287,15 +23301,25 @@ input[type=range]{accent-color:#f4f4f6}
         setRevision((v) => v + 1);
       }
       if (t === "area" && activePath.current.length > 3) {
-        const id = `area-${Date.now()}`, points = smartClose([...activePath.current], Math.max(22, brushRef.current * 0.55));
-        annotationsRef.current.push({ id, kind: "area", points, title: "", category: "\u6D3B\u52A8", description: "", color: "#9e7919" });
+        const pending = pendingPlacement.current;
+        const id = pending?.id ?? `area-${Date.now()}`, points = smartClose([...activePath.current], Math.max(22, brushRef.current * 0.55));
+        annotationsRef.current.push({ id, kind: "area", points, title: pending?.name ?? "", category: pending?.category ?? "\u8303\u56F4\u5F71\u54CD", description: "", color: "#9e7919" });
+        if (pending) {
+          setPendingPlacements((items) => items.filter((item) => item.id !== pending.id));
+          pendingPlacement.current = null;
+        }
         activePath.current = [];
         setSelected(id);
         setRevision((v) => v + 1);
       }
       if (t === "point") {
-        const id = `point-${Date.now()}`;
-        annotationsRef.current.push({ id, kind: "point", points: [p], title: "", category: "\u5730\u70B9", description: "", color: "#5c806d" });
+        const pending = pendingPlacement.current;
+        const id = pending?.id ?? `point-${Date.now()}`;
+        annotationsRef.current.push({ id, kind: "point", points: [p], title: pending?.name ?? "", category: pending?.category ?? "\u5730\u70B9", description: "", color: "#5c806d" });
+        if (pending) {
+          setPendingPlacements((items) => items.filter((item) => item.id !== pending.id));
+          pendingPlacement.current = null;
+        }
         setSelected(id);
         setRevision((v) => v + 1);
       }
@@ -23409,7 +23433,8 @@ input[type=range]{accent-color:#f4f4f6}
     const toolGroups = [
       { label: "\u5BFC\u822A", items: [{ id: "pan", name: "\u79FB\u52A8" }] },
       { label: "\u5730\u5F62", items: [{ id: "raise", name: "\u62AC\u5347" }, { id: "lower", name: "\u4E0B\u538B" }, { id: "seaLevel", name: "\u6D77\u5E73\u9762" }, { id: "smooth", name: "\u5E73\u6ED1" }, { id: "flatten", name: "\u538B\u5E73" }, { id: "river", name: "\u6CB3\u6D41\u7ED8\u5236" }] },
-      { label: "\u4E16\u754C\u5185\u5BB9", items: [{ id: "point", name: "\u8BBE\u5B9A\u70B9" }, { id: "line", name: "\u5173\u8054\u7EBF" }, { id: "area", name: "\u6D3B\u52A8\u9762" }, { id: "moveItem", name: "\u79FB\u52A8\u5185\u5BB9" }, { id: "deleteItem", name: "\u5220\u9664\u5185\u5BB9" }] }
+      { label: "\u4E16\u754C\u5185\u5BB9", items: [{ id: "point", name: "\u8BBE\u5B9A\u70B9" }, { id: "line", name: "\u5173\u8054\u7EBF" }, { id: "area", name: "\u8303\u56F4\u5F71\u54CD" }, { id: "moveItem", name: "\u79FB\u52A8\u5185\u5BB9" }, { id: "deleteItem", name: "\u5220\u9664\u5185\u5BB9" }] },
+      ...(pendingPlacements.length ? [{ label: "\u5F85\u5B9A\u4F4D\u5230\u5730\u56FE", items: pendingPlacements.map((item) => ({ id: `pending-${item.id}`, name: `${item.name} \xB7 ${item.placement}`, pending: item })) }] : [])
     ];
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "editor-shell", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "editor-top", children: [
@@ -23432,9 +23457,15 @@ input[type=range]{accent-color:#f4f4f6}
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "editor-body", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("aside", { className: "tool-dock", children: toolGroups.map((group) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: group.label }),
-          group.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { className: tool === item.id ? "active" : "", onClick: () => {
+          group.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { className: tool === item.id || item.pending && pendingPlacement.current?.id === item.pending.id ? "active" : "", onClick: () => {
             lineStart.current = null;
-            setTool(item.id);
+            if (item.pending) {
+              pendingPlacement.current = item.pending;
+              setTool(item.pending.placement === "\u8303\u56F4\u5F71\u54CD" ? "area" : "point");
+            } else {
+              pendingPlacement.current = null;
+              setTool(item.id);
+            }
           }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("i", { className: `tool-icon tool-${item.id}` }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.name })
@@ -23498,13 +23529,13 @@ input[type=range]{accent-color:#f4f4f6}
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("i", { style: { background: cardDraft.color } }),
-                cardDraft.kind === "point" ? "\u8BBE\u5B9A\u70B9" : cardDraft.kind === "area" ? "\u6D3B\u52A8\u9762" : cardDraft.kind === "river" ? "\u6CB3\u6D41" : "\u5173\u8054\u7EBF"
+                cardDraft.kind === "point" ? "\u8BBE\u5B9A\u70B9" : cardDraft.kind === "area" ? "\u8303\u56F4\u5F71\u54CD" : cardDraft.kind === "river" ? "\u6CB3\u6D41" : "\u5173\u8054\u7EBF"
               ] }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setSelected(null) })
             ] }),
             !(cardDraft.kind === "line" && cardDraft.category === "\u5B58\u5728") && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
               "\u540D\u79F0",
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { placeholder: cardDraft.kind === "point" ? "\u672A\u547D\u540D\u8BBE\u5B9A\u70B9" : cardDraft.kind === "area" ? "\u672A\u547D\u540D\u6D3B\u52A8" : cardDraft.kind === "line" ? "\u672A\u547D\u540D\u540D\u79F0" : "\u672A\u547D\u540D\u6CB3\u6D41", value: cardDraft.title, onChange: (e) => setCardDraft((draft) => draft ? { ...draft, title: e.target.value } : draft) })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { placeholder: cardDraft.kind === "point" ? "\u672A\u547D\u540D\u8BBE\u5B9A\u70B9" : cardDraft.kind === "area" ? "\u672A\u547D\u540D\u8303\u56F4\u5F71\u54CD" : cardDraft.kind === "line" ? "\u672A\u547D\u540D\u540D\u79F0" : "\u672A\u547D\u540D\u6CB3\u6D41", value: cardDraft.title, onChange: (e) => setCardDraft((draft) => draft ? { ...draft, title: e.target.value } : draft) })
             ] }),
             cardDraft.kind === "point" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
               "\u7C7B\u522B",
@@ -24299,7 +24330,7 @@ input[type=range]{accent-color:#f4f4f6}
           return point ? [{ id: point.id, label: point.title || "\u672A\u547D\u540D\u8BBE\u5B9A\u70B9", meta: point.category }] : [];
         });
       }
-      return { id: annotation.id, name: annotation.title || { point: "\u672A\u547D\u540D\u8BBE\u5B9A\u70B9", line: "\u672A\u547D\u540D\u5173\u8054", area: "\u672A\u547D\u540D\u6D3B\u52A8", river: "\u672A\u547D\u540D\u6CB3\u6D41" }[annotation.kind], type: annotation.category, x: center.x, y: center.y, color: annotation.color, tint: "#eceae4", zoom: annotation.kind === "area" ? 1.45 : 2.1, kicker: annotation.kind === "point" ? "\u8BBE\u5B9A\u70B9" : annotation.kind === "line" ? "\u5173\u8054" : annotation.kind === "area" ? "\u6D3B\u52A8\u9762" : "\u6CB3\u6D41", description: annotation.description || "\u5C1A\u672A\u586B\u5199\u8BE6\u7EC6\u4ECB\u7ECD\u3002", note: "\u8FD9\u662F\u8FD9\u4E2A\u4E16\u754C\u6301\u7EED\u751F\u957F\u540E\u7559\u4E0B\u7684\u4E00\u4EFD\u6863\u6848\u3002", links };
+      return { id: annotation.id, name: annotation.title || { point: "\u672A\u547D\u540D\u8BBE\u5B9A\u70B9", line: "\u672A\u547D\u540D\u5173\u8054", area: "\u672A\u547D\u540D\u8303\u56F4\u5F71\u54CD", river: "\u672A\u547D\u540D\u6CB3\u6D41" }[annotation.kind], type: annotation.category, x: center.x, y: center.y, color: annotation.color, tint: "#eceae4", zoom: annotation.kind === "area" ? 1.45 : 2.1, kicker: annotation.kind === "point" ? "\u8BBE\u5B9A\u70B9" : annotation.kind === "line" ? "\u5173\u8054" : annotation.kind === "area" ? "\u8303\u56F4\u5F71\u54CD" : "\u6CB3\u6D41", description: annotation.description || "\u5C1A\u672A\u586B\u5199\u8BE6\u7EC6\u4ECB\u7ECD\u3002", note: "", links };
     }, [savedMap]);
     const selectedAnnotation = savedMap.annotations.find((item) => item.id === selected);
     const entry = selectedAnnotation ? annotationEntry(selectedAnnotation) : null;
@@ -24561,7 +24592,7 @@ input[type=range]{accent-color:#f4f4f6}
         ] })
       ] }),
       searchOpen && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "map-search-panel", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("input", { autoFocus: true, value: searchQuery, placeholder: "\u641C\u7D22\u8BBE\u5B9A\u3001\u5173\u8054\u6216\u6D3B\u52A8\u2026", onChange: (event) => setSearchQuery(event.target.value), onKeyDown: (event) => {
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("input", { autoFocus: true, value: searchQuery, placeholder: "\u641C\u7D22\u8BBE\u5B9A\u3001\u5173\u8054\u6216\u8303\u56F4\u5F71\u54CD\u2026", onChange: (event) => setSearchQuery(event.target.value), onKeyDown: (event) => {
           if (event.key === "Escape") setSearchOpen(false);
         } }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { children: savedMap.annotations.filter((item) => !searchQuery.trim() || `${item.title} ${item.category} ${item.description}`.toLowerCase().includes(searchQuery.trim().toLowerCase())).slice(0, 8).map((item) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("button", { onClick: () => {
@@ -24586,7 +24617,7 @@ input[type=range]{accent-color:#f4f4f6}
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("button", { className: layers.areas ? "rail-item active" : "rail-item", onClick: () => setLayers((v) => ({ ...v, areas: !v.areas })), children: [
               /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "rail-glyph area-glyph" }),
-              "\u6D3B\u52A8"
+              "\u8303\u56F4\u5F71\u54CD"
             ] })
           ] }) }),
           /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "rail-bottom", children: [
@@ -24650,7 +24681,7 @@ input[type=range]{accent-color:#f4f4f6}
               /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { onClick: () => zoomButton(0.806), "aria-label": "\u7F29\u5C0F", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "minus" }) }),
               /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { onClick: () => animateTo({ x: 500, y: 325, zoom: 0.9 }), "aria-label": "\u91CD\u7F6E\u89C6\u56FE", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "target" }) })
             ] }),
-            layers.areas && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "mode-notice", children: "\u6D3B\u52A8\u67E5\u770B\u4E2D \xB7 \u8BBE\u5B9A\u70B9\u4E0E\u5173\u8054\u6682\u4E0D\u53EF\u9009" })
+            layers.areas && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "mode-notice", children: "\u8303\u56F4\u5F71\u54CD\u67E5\u770B\u4E2D \xB7 \u8BBE\u5B9A\u70B9\u4E0E\u5173\u8054\u6682\u4E0D\u53EF\u9009" })
           ] }),
           entry && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("aside", { className: `detail-panel ${panelOpen ? "open" : ""}`, children: [
             /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("header", { className: "panel-header", children: [
