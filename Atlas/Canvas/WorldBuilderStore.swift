@@ -412,7 +412,10 @@ final class WorldBuilderStore: ObservableObject {
         for (offset, annotation) in spatial.enumerated() {
             let kind = builderKind(for: annotation)
             let fallback = annotation.kind == "area" ? "未命名范围影响" : "未命名\(kind.title)"
-            if let index = objects.firstIndex(where: { $0.mapAnnotationID == annotation.id }) {
+            if let index = objects.firstIndex(where: {
+                $0.mapAnnotationID == annotation.id || $0.id == annotation.id
+            }) {
+                objects[index].mapAnnotationID = annotation.id
                 objects[index].kind = kind
                 objects[index].name = annotation.title?.nonEmpty ?? fallback
                 objects[index].summary = annotation.description?.nonEmpty ?? objects[index].summary

@@ -138,29 +138,27 @@ struct WorldBuilderCanvas: View {
                     timelineAxis(timeline)
                 }
 
-                AtlasGlassGroup(spacing: 36) {
-                    ForEach(store.objects) { object in
-                        let onTimeline = store.projection == .timeline
-                        let dimmed = onTimeline && object.kind != .event
-                        let world = (onTimeline ? timeline.positions[object.id] : nil) ?? object.position
-                        ObjectCard(
-                            object: object,
-                            scale: scale,
-                            selected: store.selectedIDs.contains(object.id),
-                            store: store,
-                            canEdit: canEdit,
-                            onSelect: { select(object.id) },
-                            onExpand: { openMapEditor(object.id) },
-                            pan: pan,
-                            layoutLocked: onTimeline,
-                            dimmed: dimmed
-                        )
-                        .position(worldToScreen(world))
-                        .opacity(dimmed ? 0.12 : 1)
-                        .allowsHitTesting(!dimmed)
-                        .animation(.spring(response: 0.45, dampingFraction: 0.82), value: onTimeline)
-                        .transition(.scale(scale: 0.92).combined(with: .opacity))
-                    }
+                ForEach(store.objects) { object in
+                    let onTimeline = store.projection == .timeline
+                    let dimmed = onTimeline && object.kind != .event
+                    let world = (onTimeline ? timeline.positions[object.id] : nil) ?? object.position
+                    ObjectCard(
+                        object: object,
+                        scale: scale,
+                        selected: store.selectedIDs.contains(object.id),
+                        store: store,
+                        canEdit: canEdit,
+                        onSelect: { select(object.id) },
+                        onExpand: { openMapEditor(object.id) },
+                        pan: pan,
+                        layoutLocked: onTimeline,
+                        dimmed: dimmed
+                    )
+                    .position(worldToScreen(world))
+                    .opacity(dimmed ? 0.12 : 1)
+                    .allowsHitTesting(!dimmed)
+                    .animation(.spring(response: 0.45, dampingFraction: 0.82), value: onTimeline)
+                    .transition(.scale(scale: 0.92).combined(with: .opacity))
                 }
 
                 if let plan = organizer.plan {
@@ -418,7 +416,6 @@ struct WorldBuilderCanvas: View {
             .buttonStyle(.plain)
             .foregroundStyle(AtlasColor.textPrimary)
             .contentShape(Circle())
-            .offset(x: 10, y: 14)
             .help("退出画布")
 
             VStack(alignment: .leading, spacing: 1) {
