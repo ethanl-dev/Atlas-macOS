@@ -293,7 +293,9 @@ input[type=range]{accent-color:#f4f4f6}
 .editor-actions button{height:36px!important;border-radius:18px!important}
 .editor-actions .dark-button{display:none!important}
 .editor-history{
-  display:flex!important;position:fixed;left:auto;right:158px;top:25px;transform:none;
+  display:flex!important;position:fixed!important;left:auto!important;right:158px;top:24px!important;
+  bottom:auto!important;transform:none!important;margin:0!important;
+  height:44px!important;box-sizing:border-box;align-items:center;
   gap:3px;padding:4px;border-radius:22px;pointer-events:auto;
   z-index:135;
   background:linear-gradient(145deg,rgba(255,255,255,.10),rgba(12,14,22,.50));
@@ -315,7 +317,15 @@ input[type=range]{accent-color:#f4f4f6}
   background:rgba(255,255,255,.065);
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
 .back-button:hover{background:rgba(255,255,255,.13);transform:scale(1.04)}
-.back-button i{left:18px;top:16px}
+.back-button{
+  display:grid!important;place-items:center!important;padding:0!important;
+  box-sizing:border-box!important;
+}
+.back-button i{
+  position:static!important;display:block;width:9px;height:9px;
+  border-left-width:1.5px;border-bottom-width:1.5px;
+  transform:translateX(2px) rotate(45deg);
+}
 .soft-button,.dark-button,.editor-history,.layers-toggle,.brush-popover,.scale-bar{
   -webkit-backdrop-filter:blur(22px) saturate(1.2);backdrop-filter:blur(22px) saturate(1.2);
 }
@@ -408,17 +418,29 @@ input[type=range]{accent-color:#f4f4f6}
 .links-section>button:hover{background:rgba(255,255,255,.07)}
 .zoom-control{right:92px;bottom:24px}.legend,.legend-reopen{left:240px;bottom:24px}.scale-bar{left:176px!important;bottom:24px!important}
 .reopen-card{display:none!important}
-.editor-shell .back-button{position:fixed!important;left:24px;top:24px;z-index:120}
+.editor-shell .back-button{
+  position:fixed!important;left:24px;top:24px!important;bottom:auto!important;
+  margin:0!important;z-index:120
+}
 .editor-shell .editor-title{padding:0}
 .card-copy blockquote:empty{display:none}
 .tool-explain,.layers-panel{display:none!important}
 .layers-toggle{
-  right:24px!important;top:24px!important;height:44px!important;padding:0 18px!important;
+  position:fixed!important;left:auto!important;right:24px!important;
+  top:24px!important;bottom:auto!important;transform:none!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  height:44px!important;box-sizing:border-box!important;margin:0!important;padding:0 18px!important;
+  line-height:1!important;
   border-radius:20px!important;color:#fff!important;
   background:linear-gradient(135deg,rgba(94,77,196,.48),rgba(28,164,133,.30))!important;
   border:1px solid rgba(255,255,255,.24)!important;
   box-shadow:inset 0 1px rgba(255,255,255,.30),0 14px 36px rgba(0,0,0,.36)!important}
 .tool-dock .pending-dot{width:10px;height:10px;border-radius:50%;box-shadow:0 0 12px currentColor}
+.tool-dock .pending-area{
+  width:14px;height:14px;flex:0 0 14px;border:1.5px dashed currentColor;
+  border-radius:4px;background:transparent!important;box-shadow:0 0 10px color-mix(in srgb,currentColor 48%,transparent);
+  transform:rotate(-7deg);
+}
 @media(max-width:760px){.legend,.legend-reopen,.scale-bar{left:18px!important;bottom:92px!important}.zoom-control{right:82px;bottom:24px}}
 .mode-notice{top:82px;color:#fff}
 .map-search-panel{
@@ -22673,7 +22695,7 @@ input[type=range]{accent-color:#f4f4f6}
       const hit = segmentIntersection(a, b, path[i], path[i + 1]);
       if (hit) return [hit, ...path.slice(i + 1, path.length - 1), hit];
     }
-    return path;
+    return [...path, { ...first }];
   }
   function inside(p, poly) {
     let yes = false;
@@ -23493,7 +23515,7 @@ input[type=range]{accent-color:#f4f4f6}
               setTool(item.id);
             }
           }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("i", { className: item.pending ? "pending-dot" : `tool-icon tool-${item.id}`, style: item.pending ? { background: item.pending.color, color: item.pending.color } : void 0 }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("i", { className: item.pending ? item.pending.placement === "\u8303\u56F4\u5F71\u54CD" ? "pending-dot pending-area" : "pending-dot" : `tool-icon tool-${item.id}`, style: item.pending ? { background: item.pending.placement === "\u8303\u56F4\u5F71\u54CD" ? "transparent" : item.pending.color, color: item.pending.color } : void 0 }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.name })
           ] }, item.id))
         ] }, group.label)) }),

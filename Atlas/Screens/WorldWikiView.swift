@@ -78,7 +78,7 @@ struct WorldWikiView: View {
             .animation(.snappy(duration: 0.22), value: showsOutline)
             .animation(.snappy(duration: 0.22), value: showsInspector)
         }
-        .background(AtlasCanvasBackground())
+        .background(AtlasCanvasBackground(animated: true))
     }
 
     private func outline(compact: Bool) -> some View {

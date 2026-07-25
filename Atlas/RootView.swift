@@ -124,9 +124,11 @@ struct RootView: View {
                 .padding(.bottom, 24)
         }
         .overlay(alignment: .bottomTrailing) {
-            ProjectQuickMenu(model: model)
-                .padding(.bottom, 24)
-                .padding(.trailing, 12)
+            if model.destination != .publicPreview && model.destination != .overview {
+                ProjectQuickMenu(model: model)
+                    .padding(.bottom, 24)
+                    .padding(.trailing, 12)
+            }
         }
     }
 
@@ -146,7 +148,8 @@ struct RootView: View {
                 model: model,
                 mode: "manage",
                 worldName: model.activeWorld.name,
-                canEdit: model.activeRole == .owner && model.canWriteActiveWorld,
+                canEdit: (model.activeRole == .owner || model.activeRole == .participant) &&
+                    model.canWriteActiveWorld,
                 onExit: { model.destination = .publicPreview }
             )
             .ignoresSafeArea()

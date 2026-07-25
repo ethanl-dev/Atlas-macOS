@@ -56,6 +56,8 @@ struct WorldBuilderCanvas: View {
     ]
     @State private var showWorldNameEditor = false
     @State private var worldNameDraft = ""
+    @State private var participantDraftSubmitted = false
+    @State private var participantMapDraftJSON: String?
     @FocusState private var worldNameEditorFocused: Bool
 
     @StateObject private var organizer = CanvasOrganizer()
@@ -608,23 +610,23 @@ struct WorldBuilderCanvas: View {
     // MARK: - 顶栏
 
     private var topBar: some View {
-        HStack(spacing: 0) {
-            topBarTitleGroup
-                .frame(width: 360, alignment: .leading)
+        ZStack {
+            HStack(spacing: 0) {
+                topBarTitleGroup
+                    .frame(width: 360, alignment: .leading)
 
-            Spacer(minLength: AtlasSpacing.l)
+                Spacer(minLength: AtlasSpacing.l)
+
+                topBarActions
+                    .frame(width: 360, alignment: .trailing)
+            }
+            .padding(.trailing, AtlasSpacing.m)
+            // 交通灯和全局返回键只影响左侧标题，不参与中间胶囊的定位计算。
+            .padding(.leading, Self.trafficLightInset)
 
             projectionSwitch
-
-            Spacer(minLength: AtlasSpacing.l)
-
-            topBarActions
-                .frame(width: 360, alignment: .trailing)
         }
         .padding(.vertical, AtlasSpacing.m)
-        .padding(.trailing, AtlasSpacing.m)
-        // macOS 交通灯（红黄绿）在 .hiddenTitleBar 下仍浮于左上角，给顶栏左侧留出安全区。
-        .padding(.leading, Self.trafficLightInset)
         .frame(height: 76)
         .frame(maxWidth: .infinity)
         .background {
@@ -673,7 +675,7 @@ struct WorldBuilderCanvas: View {
                     if canEdit { openWorldNameEditor() }
                 }
 
-                Text(canEdit ? (store.saved ? "所有更改已保存" : "正在编辑 · 尚未保存") : "只读浏览")
+                Text(canvasSaveStatus)
                     .font(AtlasFont.monoSmall)
                     .foregroundStyle(AtlasColor.textTertiary)
             }
@@ -686,9 +688,17 @@ struct WorldBuilderCanvas: View {
             HStack(spacing: AtlasSpacing.m) {
                 Button {
                     store.saved = true
-                    model.showToast("世界已保存 · \(store.objects.count) 个对象")
+                    if model.activeRole == .participant {
+                        participantDraftSubmitted = true
+                        model.showToast("修改已保存为待审核版本 · 尚未在企划中生效")
+                    } else {
+                        model.showToast("世界已保存 · \(store.objects.count) 个对象")
+                    }
                 } label: {
-                    AtlasButtonLabel(title: "保存", systemImage: "checkmark")
+                    AtlasButtonLabel(
+                        title: model.activeRole == .participant ? "提交修改" : "保存",
+                        systemImage: "checkmark"
+                    )
                 }
                 .buttonStyle(.atlas(.primary))
             }
@@ -697,6 +707,15 @@ struct WorldBuilderCanvas: View {
 
     private var topBarGlassShape: some Shape {
         RoundedRectangle(cornerRadius: 30, style: .continuous)
+    }
+
+    private var canvasSaveStatus: String {
+        guard canEdit else { return "只读浏览" }
+        if model.activeRole == .participant {
+            if !store.saved { return "正在编辑 · 修改尚未提交" }
+            return participantDraftSubmitted ? "待企主审核 · 当前版本尚未生效" : "参企者编辑模式"
+        }
+        return store.saved ? "所有更改已保存" : "正在编辑 · 尚未保存"
     }
 
     /// macOS 窗口控制按钮（红黄绿）占用的左上安全区宽度。
@@ -1822,7 +1841,7 @@ struct WorldBuilderCanvas: View {
             WorldMapCanvasView(
                 mode: store.mapMade ? "manage" : "create",
                 canEdit: canEdit,
-                initialMapJSON: store.mapJSON,
+                initialMapJSON: participantMapDraftJSON ?? store.mapJSON,
                 pendingPlacementsJSON: store.pendingMapPlacementsJSON(),
                 onExit: {
                     withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
@@ -1830,9 +1849,17 @@ struct WorldBuilderCanvas: View {
                     }
                 },
                 onSave: { _, mapJSON in
-                    // 就地生成海岸线并留在编辑器里让用户看到结果；返回由用户点“返回”触发
-                    store.synchronizeMap(mapJSON)
-                    model.showToast("海岸线已生成 · 点左上返回画布")
+                    if model.activeRole == .participant {
+                        // Demo 阶段：参企者的地图修改只保存在自己的待审核版本中，
+                        // 不同步到企划正式画布，也不覆盖企主当前发布的数据。
+                        participantMapDraftJSON = mapJSON
+                        participantDraftSubmitted = true
+                        model.showToast("地图修改已提交审核 · 当前企划地图未改变")
+                    } else {
+                        // 企主保存后直接同步正式画布。
+                        store.synchronizeMap(mapJSON)
+                        model.showToast("海岸线已生成 · 点左上返回画布")
+                    }
                 }
             )
             .ignoresSafeArea()

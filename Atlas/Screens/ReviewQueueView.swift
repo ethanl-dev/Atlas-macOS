@@ -43,7 +43,7 @@ struct ReviewQueueView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .background(AtlasCanvasBackground())
+        .background(AtlasCanvasBackground(animated: true))
     }
 
     private var header: some View {
@@ -76,9 +76,11 @@ struct ReviewQueueView: View {
                                     .font(AtlasFont.monoSmall)
                                     .foregroundStyle(AtlasColor.textTertiary)
                                 Spacer()
-                                Text(submission.state.rawValue)
-                                    .font(AtlasFont.monoSmall)
-                                    .foregroundStyle(AtlasColor.textSecondary)
+                                if submission.state != .pending {
+                                    Text(submission.state.rawValue)
+                                        .font(AtlasFont.monoSmall)
+                                        .foregroundStyle(AtlasColor.textSecondary)
+                                }
                             }
                             Text(submission.title)
                                 .font(AtlasFont.label)
@@ -116,9 +118,7 @@ struct ReviewQueueView: View {
                         .foregroundStyle(AtlasColor.textTertiary)
                 }
                 Spacer()
-                Label(submission.state.rawValue, systemImage: statusSymbol(submission.state))
-                    .font(AtlasFont.caption)
-                    .foregroundStyle(AtlasColor.textSecondary)
+                actions(submission)
             }
             .padding(AtlasSpacing.xl)
 
@@ -132,11 +132,6 @@ struct ReviewQueueView: View {
                     impactPreview(submission)
                 }
             }
-
-            Divider().overlay(AtlasColor.borderSubtle)
-
-            actions(submission)
-                .padding(AtlasSpacing.l)
         }
     }
 
@@ -212,15 +207,13 @@ struct ReviewQueueView: View {
     }
 
     private func actions(_ submission: AtlasSubmission) -> some View {
-        HStack {
+        HStack(spacing: AtlasSpacing.s) {
             Button {
                 process(submission, approved: false)
             } label: {
                 AtlasButtonLabel(title: "拒绝", systemImage: "xmark")
             }
             .buttonStyle(.atlas(.ghost))
-
-            Spacer()
 
             Button {
                 process(submission, approved: true)

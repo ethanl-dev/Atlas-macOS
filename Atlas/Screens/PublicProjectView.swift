@@ -483,49 +483,58 @@ struct PublicProjectView: View {
     }
 
     private func workLightbox(_ work: AtlasAssetPreview) -> some View {
-        ZStack {
-            Color.black.opacity(0.82)
-                .ignoresSafeArea()
-                .onTapGesture { selectedWork = nil }
+        GeometryReader { proxy in
+            let panelWidth = max(280, min(920, proxy.size.width - 96))
+            let panelHeight = max(300, min(680, proxy.size.height - 96))
 
-            VStack(spacing: AtlasSpacing.l) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(work.title)
-                            .font(AtlasFont.title)
-                        Text("@\(work.author) · \(work.type)")
-                            .font(AtlasFont.caption)
-                            .foregroundStyle(AtlasColor.textSecondary)
-                    }
-                    Spacer()
-                    Button {
-                        selectedWork = nil
-                    } label: {
-                        Image(systemName: "xmark")
-                            .frame(width: 42, height: 42)
-                            .atlasP1Glass(Circle(), interactive: true)
-                    }
-                    .buttonStyle(.plain)
-                }
+            ZStack {
+                Color.black.opacity(0.82)
+                    .ignoresSafeArea()
+                    .onTapGesture { selectedWork = nil }
 
-                if work.kind == .text {
-                    ScrollView {
-                        Text(work.body)
-                            .font(.system(size: 17))
-                            .lineSpacing(8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(spacing: AtlasSpacing.l) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(work.title)
+                                .font(AtlasFont.title)
+                            Text("@\(work.author) · \(work.type)")
+                                .font(AtlasFont.caption)
+                                .foregroundStyle(AtlasColor.textSecondary)
+                        }
+                        Spacer()
+                        Button {
+                            selectedWork = nil
+                        } label: {
+                            Image(systemName: "xmark")
+                                .frame(width: 42, height: 42)
+                                .atlasP1Glass(Circle(), interactive: true)
+                        }
+                        .buttonStyle(.plain)
                     }
-                } else {
-                    AssetArtworkPreview(seed: work.seed, symbol: work.symbol)
-                        .aspectRatio(16 / 10, contentMode: .fit)
+
+                    if work.kind == .text {
+                        ScrollView {
+                            Text(work.body)
+                                .font(.system(size: 17))
+                                .lineSpacing(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    } else {
+                        AssetArtworkPreview(seed: work.seed)
+                            .frame(
+                                maxWidth: panelWidth - AtlasSpacing.xl * 2,
+                                maxHeight: panelHeight - 116
+                            )
+                    }
                 }
+                .padding(AtlasSpacing.xl)
+                .frame(width: panelWidth, height: panelHeight)
+                .atlasFloatingGlass(
+                    RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
+                .onTapGesture { }
             }
-            .padding(AtlasSpacing.xl)
-            .frame(maxWidth: 920, maxHeight: 680)
-            .atlasFloatingGlass(
-                RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
-            )
-            .padding(48)
         }
     }
 
@@ -960,10 +969,13 @@ private struct LibraryWorkCard: View {
 
 private struct AssetArtworkPreview: View {
     var seed: Int
-    var symbol: String
 
     var body: some View {
-        PixabayLandscape(seed: seed + 2)
+        Image(PixabayLandscape.imageName(for: seed + 2))
+            .resizable()
+            .scaledToFit()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black.opacity(0.18))
             .overlay {
                 LinearGradient(
                     colors: [.clear, .black.opacity(0.28)],
@@ -971,15 +983,8 @@ private struct AssetArtworkPreview: View {
                     endPoint: .bottom
                 )
             }
-            .overlay(alignment: .bottomTrailing) {
-                Image(systemName: symbol)
-                    .font(.system(size: 28, weight: .ultraLight))
-                    .foregroundStyle(.white.opacity(0.88))
-                    .padding(AtlasSpacing.m)
-                    .shadow(color: .black.opacity(0.7), radius: 7)
-            }
-        .clipShape(RoundedRectangle(cornerRadius: AtlasRadius.card))
-        .overlay(RoundedRectangle(cornerRadius: AtlasRadius.card).stroke(AtlasColor.borderSubtle))
+            .clipShape(RoundedRectangle(cornerRadius: AtlasRadius.card))
+            .overlay(RoundedRectangle(cornerRadius: AtlasRadius.card).stroke(AtlasColor.borderSubtle))
     }
 }
 

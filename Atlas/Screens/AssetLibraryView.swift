@@ -36,7 +36,7 @@ struct AssetLibraryView: View {
                 }
             }
         }
-        .background(AtlasCanvasBackground())
+        .background(AtlasCanvasBackground(animated: true))
         .fileImporter(
             isPresented: $importing,
             allowedContentTypes: [.image, .pdf, .plainText, .data],
