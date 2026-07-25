@@ -382,13 +382,20 @@ input[type=range]{accent-color:#f4f4f6}
   -webkit-backdrop-filter:blur(24px) saturate(1.2);backdrop-filter:blur(24px) saturate(1.2);
   border:1px solid rgba(255,255,255,.16);
   box-shadow:inset 0 1px rgba(255,255,255,.22),0 18px 46px rgba(0,0,0,.38)!important}
-.detail-panel{top:84px;right:16px;height:calc(100% - 100px);border-radius:22px;overflow:hidden}
+.detail-panel{
+  position:fixed!important;top:84px;right:84px;height:calc(100% - 168px);
+  border-radius:22px;overflow:hidden;
+  background:rgba(10,12,18,.58)!important;
+  -webkit-backdrop-filter:blur(18px) saturate(1.12);backdrop-filter:blur(18px) saturate(1.12)}
 .panel-header,.card-footer{background:rgba(14,16,23,.46)!important}
-.card-scroll{background:rgba(9,10,15,.50)}
+.card-scroll{background:transparent!important;padding-bottom:64px}
 .card-copy blockquote{background:rgba(112,78,190,.16);color:#d5c4ff}
 .links-section>button{color:var(--ink)}
 .links-section>button:hover{background:rgba(255,255,255,.07)}
-.zoom-control{right:92px;bottom:24px}.legend,.legend-reopen{left:240px;bottom:24px}.scale-bar{left:240px!important;bottom:24px!important}
+.zoom-control{right:92px;bottom:24px}.legend,.legend-reopen{left:240px;bottom:24px}.scale-bar{left:224px!important;bottom:24px!important}
+.reopen-card{display:none!important}
+.editor-shell .back-button{position:fixed!important;left:24px;top:24px;z-index:120}
+.editor-shell .editor-title{padding-left:54px}
 @media(max-width:760px){.legend,.legend-reopen,.scale-bar{left:18px!important;bottom:92px!important}.zoom-control{right:82px;bottom:24px}}
 .mode-notice{top:82px;color:#fff}
 .map-search-panel{
@@ -22661,7 +22668,7 @@ input[type=range]{accent-color:#f4f4f6}
     return `rgb(${mix(16)},${mix(8)},${mix(0)})`;
   }
   function paintedColor(v) {
-    const stops = v <= 0 ? [[-0.35, "#315f7a"], [-0.18, "#4f86a0"], [-0.08, "#77aabd"], [0, "#a9d2d2"]] : [[0, "#78aa72"], [0.28, "#96bd72"], [0.48, "#d0b566"], [0.68, "#c78655"], [0.84, "#8d705f"], [1, "#f2f4f3"]];
+    const stops = v <= 0 ? [[-0.35, "#173b52"], [-0.18, "#245675"], [-0.08, "#315f7a"], [0, "#315f7a"]] : [[0, "#78aa72"], [0.28, "#96bd72"], [0.48, "#d0b566"], [0.68, "#c78655"], [0.84, "#8d705f"], [1, "#f2f4f3"]];
     for (let i = 1; i < stops.length; i++) if (v <= stops[i][0]) return mixColor(stops[i - 1][1], stops[i][1], clamp((v - stops[i - 1][0]) / (stops[i][0] - stops[i - 1][0]), 0, 1));
     return stops[stops.length - 1][1];
   }
@@ -22834,6 +22841,8 @@ input[type=range]{accent-color:#f4f4f6}
     const coastRef = (0, import_react.useRef)(initialMap ? initialMap.coasts.map((path) => path.map((p) => ({ ...p }))) : []);
     const annotationsRef = (0, import_react.useRef)(initialMap ? initialMap.annotations.map((a) => ({ ...a, points: a.points.map((p) => ({ ...p })) })).filter((a) => a.kind !== "line" || a.sourceId && a.targetId) : []);
     const camera = (0, import_react.useRef)({ x: 500, y: 325, zoom: 1 });
+    const zoomLimits = (0, import_react.useRef)({ min: 0.65, max: 1.55 });
+    const cameraInitialized = (0, import_react.useRef)(false);
     const pointer = (0, import_react.useRef)({ down: false, x: 0, y: 0, lastX: 0, lastY: 0, painted: false });
     const activePath = (0, import_react.useRef)([]);
     const riverEnded = (0, import_react.useRef)(false);
@@ -22849,6 +22858,7 @@ input[type=range]{accent-color:#f4f4f6}
     const [strength, setStrength] = (0, import_react.useState)(42);
     const strengthRef = (0, import_react.useRef)(42);
     const [worldKm, setWorldKm] = (0, import_react.useState)(initialMap?.worldKm ?? 3600);
+    const [editorZoom, setEditorZoom] = (0, import_react.useState)(1);
     const [setup, setSetup] = (0, import_react.useState)(!initialMap);
     const [heightOpacity, setHeightOpacity] = (0, import_react.useState)(100);
     const heightOpacityRef = (0, import_react.useRef)(100);
@@ -22914,6 +22924,35 @@ input[type=range]{accent-color:#f4f4f6}
     (0, import_react.useEffect)(() => {
       rebuildTerrainCache(2);
     }, [revision]);
+    function clampEditorCamera(c, rect) {
+      const halfWidth = rect.width / (2 * c.zoom);
+      const halfHeight = rect.height / (2 * c.zoom);
+      c.x = halfWidth >= W / 2 ? W / 2 : clamp(c.x, halfWidth, W - halfWidth);
+      c.y = halfHeight >= H / 2 ? H / 2 : clamp(c.y, halfHeight, H - halfHeight);
+    }
+    (0, import_react.useEffect)(() => {
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      const fit = () => {
+        const rect = wrap.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const fitZoom = Math.max(0.1, Math.min((rect.width - 48) / W, (rect.height - 48) / H));
+        zoomLimits.current = { min: fitZoom, max: Math.max(fitZoom * 4, fitZoom + 0.6) };
+        const c = camera.current;
+        if (!cameraInitialized.current) {
+          c.x = W / 2;
+          c.y = H / 2;
+          c.zoom = fitZoom;
+          cameraInitialized.current = true;
+        } else c.zoom = clamp(c.zoom, zoomLimits.current.min, zoomLimits.current.max);
+        clampEditorCamera(c, rect);
+        setEditorZoom(c.zoom);
+      };
+      fit();
+      const observer = new ResizeObserver(fit);
+      observer.observe(wrap);
+      return () => observer.disconnect();
+    }, []);
     (0, import_react.useEffect)(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -22922,11 +22961,13 @@ input[type=range]{accent-color:#f4f4f6}
         const rect = canvas.getBoundingClientRect(), c = camera.current;
         const beforeX = c.x + (event.clientX - rect.left - rect.width / 2) / c.zoom;
         const beforeY = c.y + (event.clientY - rect.top - rect.height / 2) / c.zoom;
-        const next = Math.max(0.65, Math.min(1.55, c.zoom * Math.exp(-event.deltaY * 15e-4)));
+        const next = clamp(c.zoom * Math.exp(-event.deltaY * 15e-4), zoomLimits.current.min, zoomLimits.current.max);
         if (!Number.isFinite(next)) return;
         c.zoom = next;
         c.x = beforeX - (event.clientX - rect.left - rect.width / 2) / next;
         c.y = beforeY - (event.clientY - rect.top - rect.height / 2) / next;
+        clampEditorCamera(c, rect);
+        setEditorZoom(next);
       };
       canvas.addEventListener("wheel", onWheel, { passive: false });
       return () => canvas.removeEventListener("wheel", onWheel);
@@ -23051,6 +23092,7 @@ input[type=range]{accent-color:#f4f4f6}
             canvas.style.height = `${rect.height}px`;
           }
           const ctx = canvas.getContext("2d"), c = camera.current;
+          clampEditorCamera(c, rect);
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           ctx.clearRect(0, 0, rect.width, rect.height);
           ctx.fillStyle = "#315f7a";
@@ -23065,6 +23107,19 @@ input[type=range]{accent-color:#f4f4f6}
           ctx.imageSmoothingQuality = "high";
           if (terrainCacheRef.current) ctx.drawImage(terrainCacheRef.current, 0, 0, W, H);
           ctx.globalAlpha = 1;
+          coastRef.current.forEach((path) => {
+            if (path.length < 2) return;
+            ctx.beginPath();
+            path.forEach((p, index) => index ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+            ctx.strokeStyle = "rgba(224,241,224,.82)";
+            ctx.lineWidth = 3.4 / c.zoom;
+            ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+            ctx.stroke();
+            ctx.strokeStyle = "rgba(42,72,62,.92)";
+            ctx.lineWidth = 1.65 / c.zoom;
+            ctx.stroke();
+          });
           const hoveredConnectionPoint = toolRef.current === "line" && Number.isFinite(pointer.current.x) && Number.isFinite(pointer.current.y) ? pointAt(mapPoint(pointer.current.x, pointer.current.y)) : void 0;
           annotationsRef.current.forEach((a) => {
             if (a.wikiOnly) return;
@@ -23416,7 +23471,7 @@ input[type=range]{accent-color:#f4f4f6}
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "scale-bar", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 80 } }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("b", { children: [
-              Math.round(worldKm / 10),
+              Math.max(1, Math.round(worldKm / W * 80 / editorZoom)),
               " km"
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("small", { children: [
@@ -23754,15 +23809,15 @@ input[type=range]{accent-color:#f4f4f6}
       savedMap.coasts.forEach((path) => {
         ctx.beginPath();
         coastPath(ctx, path);
-        ctx.strokeStyle = "rgba(91,119,121,.72)";
-        ctx.lineWidth = 2.7 / camera.zoom;
+        ctx.strokeStyle = "rgba(224,241,224,.82)";
+        ctx.lineWidth = 3.4 / camera.zoom;
         ctx.lineJoin = "round";
         ctx.lineCap = "round";
         ctx.stroke();
         ctx.beginPath();
         coastPath(ctx, path);
-        ctx.strokeStyle = (savedMap.coastRoughness ?? 50) > 58 ? "rgba(55,76,59,.82)" : "rgba(81,76,57,.78)";
-        ctx.lineWidth = 1.15 / camera.zoom;
+        ctx.strokeStyle = (savedMap.coastRoughness ?? 50) > 58 ? "rgba(36,67,56,.95)" : "rgba(48,74,61,.94)";
+        ctx.lineWidth = 1.65 / camera.zoom;
         ctx.stroke();
       });
       savedMap.annotations.forEach((a) => {

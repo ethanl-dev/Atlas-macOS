@@ -445,6 +445,7 @@ struct WorldBuilderCanvas: View {
             .buttonStyle(.plain)
             .foregroundStyle(AtlasColor.textPrimary)
             .contentShape(Circle())
+            .offset(x: 10, y: 14)
             .help("退出画布")
 
             VStack(alignment: .leading, spacing: 1) {

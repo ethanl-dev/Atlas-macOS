@@ -26,8 +26,8 @@ struct PublicProjectView: View {
         .background(AtlasCanvasBackground())
         .overlay(alignment: .topLeading) {
             exitButton
-                .padding(.top, 42)
-                .padding(.leading, 28)
+                .padding(.top, 24)
+                .padding(.leading, 24)
         }
     }
 
@@ -40,7 +40,7 @@ struct PublicProjectView: View {
             Image(systemName: "chevron.left")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(AtlasColor.textPrimary)
-                .frame(width: 34, height: 34)
+                .frame(width: 44, height: 44)
                 .contentShape(Circle())
                 .atlasP1Glass(Circle(), interactive: true)
         }
