@@ -691,14 +691,9 @@ struct CharacterPortrait: View {
     var initials: String
 
     var body: some View {
-        PixabayLandscape(seed: seed)
-            .overlay(alignment: .bottomLeading) {
-                Text(initials)
-                    .font(.system(size: 28, weight: .light, design: .serif))
-                    .foregroundStyle(.white)
-                    .padding(AtlasSpacing.m)
-                    .shadow(color: .black.opacity(0.8), radius: 8)
-            }
+        Image(PixabayLandscape.imageName(for: seed))
+            .resizable()
+            .scaledToFill()
             .clipShape(RoundedRectangle(cornerRadius: AtlasRadius.card))
             .overlay(RoundedRectangle(cornerRadius: AtlasRadius.card).stroke(AtlasColor.borderSubtle))
     }

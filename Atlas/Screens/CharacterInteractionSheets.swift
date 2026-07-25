@@ -47,8 +47,12 @@ struct CharacterCardSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: AtlasSpacing.xl) {
                 HStack(alignment: .top, spacing: AtlasSpacing.xl) {
-                    CharacterPortrait(seed: abs(character.id.hashValue % 9), initials: String(character.name.prefix(1)))
-                        .frame(width: 220, height: 300)
+                    CharacterPortraitColumn(
+                        character: character,
+                        width: 248,
+                        imageHeight: 372,
+                        canEditFields: character.id == "char-cen"
+                    )
                     VStack(alignment: .leading, spacing: AtlasSpacing.m) {
                         HStack {
                             VStack(alignment: .leading, spacing: 3) {
@@ -70,28 +74,9 @@ struct CharacterCardSheet: View {
                     }
                 }
 
-                HStack(alignment: .top, spacing: AtlasSpacing.m) {
-                    permissionList("适合互动", items: character.dos, tint: AtlasColor.auroraMint, symbol: "checkmark")
-                    permissionList("不可触碰", items: character.donts, tint: AtlasColor.auroraRose, symbol: "xmark")
-                }
-
-                VStack(alignment: .leading, spacing: AtlasSpacing.m) {
-                    Text("全局创作许可").font(AtlasFont.heading)
-                    FlowLayout(spacing: AtlasSpacing.s) {
-                        ForEach(character.permissions) { permission in
-                            Label("\(permission.title) · \(permission.state.rawValue)", systemImage: permissionSymbol(permission.state))
-                                .font(AtlasFont.caption)
-                                .padding(.horizontal, AtlasSpacing.s)
-                                .padding(.vertical, 7)
-                                .atlasChromaticGlass(Capsule(), tint: permissionTint(permission.state))
-                        }
-                    }
-                }
+                CharacterInteractionDisclosureGroup(character: character)
 
                 HStack {
-                    Text("发起互动后，涉及永久关系、关键立场或不可逆经历时，会进入角色拥有者确认。")
-                        .font(AtlasFont.caption)
-                        .foregroundStyle(AtlasColor.textTertiary)
                     Spacer()
                     if model.activeRole == .participant && model.canWriteActiveWorld {
                         Button {
@@ -108,27 +93,174 @@ struct CharacterCardSheet: View {
         .frame(minWidth: 760, minHeight: 680)
         .background(AtlasCanvasBackground())
     }
+}
 
-    private func permissionList(_ title: String, items: [String], tint: Color, symbol: String) -> some View {
+struct CharacterPortraitColumn: View {
+    struct CustomField: Identifiable {
+        let id = UUID()
+        var label: String
+        var value: String
+    }
+
+    let character: AtlasCharacterProfile
+    let width: CGFloat
+    let imageHeight: CGFloat
+    let canEditFields: Bool
+    @State private var fields: [CustomField] = [
+        .init(label: "常用称呼", value: "可以称呼我为「小岑」"),
+        .init(label: "互动备注", value: "夜间场景与调查剧情优先")
+    ]
+
+    var body: some View {
         VStack(alignment: .leading, spacing: AtlasSpacing.m) {
-            Text(title).font(AtlasFont.heading).foregroundStyle(tint)
-            ForEach(items, id: \.self) { item in
-                Label(item, systemImage: symbol)
-                    .font(AtlasFont.body)
+            CharacterPortrait(
+                seed: abs(character.id.hashValue % 9),
+                initials: String(character.name.prefix(1))
+            )
+            .frame(width: width, height: imageHeight)
+
+            VStack(alignment: .leading, spacing: AtlasSpacing.s) {
+                ForEach($fields) { $field in
+                    if canEditFields {
+                        VStack(alignment: .leading, spacing: 3) {
+                            TextField("字段名", text: $field.label)
+                                .font(AtlasFont.monoSmall)
+                                .foregroundStyle(AtlasColor.textTertiary)
+                            TextField("字段内容", text: $field.value)
+                                .font(AtlasFont.caption)
+                        }
+                        .textFieldStyle(.plain)
+                    } else {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(field.label)
+                                .font(AtlasFont.monoSmall)
+                                .foregroundStyle(AtlasColor.textTertiary)
+                            Text(field.value)
+                                .font(AtlasFont.caption)
+                                .foregroundStyle(AtlasColor.textPrimary)
+                        }
+                    }
+                }
+
+                if canEditFields {
+                    Button {
+                        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                            fields.append(.init(label: "新字段", value: "点击填写内容"))
+                        }
+                    } label: {
+                        Label("添加字段", systemImage: "plus")
+                            .font(AtlasFont.caption)
+                    }
+                    .buttonStyle(.plain)
                     .foregroundStyle(AtlasColor.textSecondary)
+                }
+            }
+            .padding(AtlasSpacing.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .atlasFrostedPanel(
+                RoundedRectangle(cornerRadius: AtlasRadius.control, style: .continuous)
+            )
+        }
+        .frame(width: width, alignment: .leading)
+    }
+}
+
+struct CharacterInteractionDisclosureGroup: View {
+    let character: AtlasCharacterProfile
+
+    var body: some View {
+        VStack(spacing: AtlasSpacing.m) {
+            HStack(alignment: .top, spacing: AtlasSpacing.m) {
+                CharacterDisclosurePanel(title: "适合互动", symbol: "checkmark") {
+                    VStack(alignment: .leading, spacing: AtlasSpacing.s) {
+                        ForEach(character.dos, id: \.self) { item in
+                            Label(item, systemImage: "circle.fill")
+                        }
+                    }
+                    .font(AtlasFont.caption)
+                    .foregroundStyle(AtlasColor.textSecondary)
+                }
+
+                CharacterDisclosurePanel(title: "不允许触碰", symbol: "hand.raised") {
+                    VStack(alignment: .leading, spacing: AtlasSpacing.s) {
+                        ForEach(character.donts, id: \.self) { item in
+                            Label(item, systemImage: "circle.fill")
+                        }
+                    }
+                    .font(AtlasFont.caption)
+                    .foregroundStyle(AtlasColor.textSecondary)
+                }
+            }
+
+            CharacterDisclosurePanel(title: "全局创作许可", symbol: "checklist") {
+                FlowLayout(spacing: AtlasSpacing.s) {
+                    ForEach(character.permissions) { permission in
+                        Label(
+                            "\(permission.title) · \(permission.state.rawValue)",
+                            systemImage: permissionSymbol(permission.state)
+                        )
+                        .font(AtlasFont.caption)
+                        .foregroundStyle(AtlasColor.textSecondary)
+                        .padding(.horizontal, AtlasSpacing.s)
+                        .padding(.vertical, 7)
+                        .atlasGlass(Capsule())
+                    }
+                }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(AtlasSpacing.l)
-        .atlasChromaticGlass(RoundedRectangle(cornerRadius: AtlasRadius.card), tint: tint)
     }
 
     private func permissionSymbol(_ state: AtlasCharacterProfile.Permission.State) -> String {
-        switch state { case .allowed: "checkmark"; case .confirm: "questionmark"; case .forbidden: "xmark" }
+        switch state {
+        case .allowed: return "checkmark"
+        case .confirm: return "questionmark"
+        case .forbidden: return "minus"
+        }
     }
+}
 
-    private func permissionTint(_ state: AtlasCharacterProfile.Permission.State) -> Color {
-        switch state { case .allowed: AtlasColor.auroraMint; case .confirm: AtlasColor.auroraAmber; case .forbidden: AtlasColor.auroraRose }
+private struct CharacterDisclosurePanel<Content: View>: View {
+    let title: String
+    let symbol: String
+    @ViewBuilder let content: () -> Content
+    @State private var expanded = true
+
+    var body: some View {
+        let shape = RoundedRectangle(
+            cornerRadius: expanded ? AtlasRadius.card : 18,
+            style: .continuous
+        )
+        VStack(alignment: .leading, spacing: 0) {
+            if expanded {
+                content()
+                    .padding(.horizontal, AtlasSpacing.l)
+                    .padding(.top, AtlasSpacing.l)
+                    .padding(.bottom, AtlasSpacing.m)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+            }
+
+            Button {
+                withAnimation(.spring(response: 0.44, dampingFraction: 0.86)) {
+                    expanded.toggle()
+                }
+            } label: {
+                HStack(spacing: AtlasSpacing.s) {
+                    Image(systemName: symbol)
+                    Text(title)
+                        .font(AtlasFont.label)
+                    Spacer()
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(AtlasColor.textPrimary)
+                .padding(.horizontal, AtlasSpacing.l)
+                .frame(height: 48)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .atlasFrostedPanel(shape)
+        .animation(.spring(response: 0.44, dampingFraction: 0.86), value: expanded)
     }
 }
 

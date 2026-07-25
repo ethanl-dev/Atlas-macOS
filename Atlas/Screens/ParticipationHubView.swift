@@ -753,8 +753,12 @@ private struct OCInteractionView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: AtlasSpacing.xl) {
                         HStack(alignment: .top, spacing: AtlasSpacing.l) {
-                            CharacterPortrait(seed: abs(selected.id.hashValue % 9), initials: String(selected.name.prefix(1)))
-                                .frame(width: 190, height: 240)
+                            CharacterPortraitColumn(
+                                character: selected,
+                                width: 224,
+                                imageHeight: 336,
+                                canEditFields: selected.id == "char-cen"
+                            )
                             VStack(alignment: .leading, spacing: AtlasSpacing.s) {
                                 Text(selected.name).font(AtlasFont.display)
                                 Text("\(selected.owner) · \(selected.role)")
@@ -775,21 +779,7 @@ private struct OCInteractionView: View {
                             }
                         }
 
-                        HStack(alignment: .top, spacing: AtlasSpacing.m) {
-                            ruleCard("可以", selected.dos, AtlasColor.auroraMint, "checkmark")
-                            ruleCard("不可以", selected.donts, AtlasColor.auroraRose, "xmark")
-                        }
-
-                        Text("全局创作许可").font(AtlasFont.heading)
-                        HStack {
-                            ForEach(selected.permissions) { permission in
-                                Text("\(permission.title) · \(permission.state.rawValue)")
-                                    .font(AtlasFont.caption)
-                                    .padding(.horizontal, AtlasSpacing.s)
-                                    .padding(.vertical, 7)
-                                    .atlasGlass(Capsule())
-                            }
-                        }
+                        CharacterInteractionDisclosureGroup(character: selected)
 
                         Divider().overlay(AtlasColor.borderSubtle)
                         Text("角色留言").font(AtlasFont.heading)
@@ -819,13 +809,4 @@ private struct OCInteractionView: View {
         }
     }
 
-    private func ruleCard(_ title: String, _ items: [String], _ tint: Color, _ symbol: String) -> some View {
-        VStack(alignment: .leading, spacing: AtlasSpacing.s) {
-            Text(title).font(AtlasFont.heading).foregroundStyle(tint)
-            ForEach(items, id: \.self) { Label($0, systemImage: symbol).font(AtlasFont.caption) }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(AtlasSpacing.l)
-        .atlasChromaticGlass(RoundedRectangle(cornerRadius: AtlasRadius.card), tint: tint)
-    }
 }
