@@ -24,14 +24,19 @@ struct ParticipationHubView: View {
     }
 
     @ObservedObject var model: AtlasAppModel
-    @State private var section: Section = .forum
+    @State private var section: Section = .board
+    @State private var showsContributionDetail = false
+    @Namespace private var sectionSelection
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: AtlasSpacing.s) {
+        ZStack {
+            VStack(spacing: 0) {
+                HStack(spacing: AtlasSpacing.s) {
                 ForEach(Section.allCases) { item in
                     Button {
-                        withAnimation(.snappy(duration: 0.22)) { section = item }
+                        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                            section = item
+                        }
                     } label: {
                         HStack(spacing: AtlasSpacing.s) {
                             Image(systemName: item.symbol)
@@ -43,38 +48,149 @@ struct ParticipationHubView: View {
                         .foregroundStyle(section == item ? AtlasColor.inverse : AtlasColor.textSecondary)
                         .padding(.horizontal, AtlasSpacing.m)
                         .padding(.vertical, 9)
-                        .background(section == item ? Color.white : Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
+                        .background {
+                            if section == item {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(Color.white)
+                                    .matchedGeometryEffect(id: "section-selection", in: sectionSelection)
+                            } else {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(Color.white.opacity(0.04))
+                            }
+                        }
                     }
                     .buttonStyle(.plain)
                 }
                 Spacer()
+                Button {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                        showsContributionDetail = true
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("您在本企划中的贡献度")
+                            .foregroundStyle(AtlasColor.textTertiary)
+                        Text(contributionText(model.activeContributionScore))
+                            .foregroundStyle(AtlasColor.textPrimary)
+                    }
+                    .font(AtlasFont.monoSmall)
+                    .padding(.horizontal, AtlasSpacing.m)
+                    .frame(height: 32)
+                    .atlasP1Glass(Capsule(), interactive: true)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, AtlasSpacing.l)
+
                 Text(model.isActiveWorldArchived
                      ? "已结企 · 封存浏览"
                      : (model.activeRole == .visitor ? "游客 · 只读" : model.activeRole.rawValue))
                     .font(AtlasFont.monoSmall)
                     .foregroundStyle(AtlasColor.textTertiary)
+                }
+                .padding(.horizontal, AtlasSpacing.xl)
+                .padding(.vertical, AtlasSpacing.m)
+                .background(Color.black.opacity(0.46))
+
+                Divider().overlay(AtlasColor.borderSubtle)
+
+                ZStack {
+                    switch section {
+                    case .board:
+                        TaskNoticeBoardView(model: model)
+                            .transition(.opacity.combined(with: .scale(scale: 0.995)))
+                    case .forum:
+                        ProjectForumView(model: model)
+                            .transition(.opacity.combined(with: .scale(scale: 0.995)))
+                    case .characters:
+                        OCInteractionView(model: model)
+                            .transition(.opacity.combined(with: .scale(scale: 0.995)))
+                    }
+                }
+                .animation(.easeInOut(duration: 0.24), value: section)
             }
-            .padding(.horizontal, AtlasSpacing.xl)
-            .padding(.vertical, AtlasSpacing.m)
-            .background(Color.black.opacity(0.46))
 
-            Divider().overlay(AtlasColor.borderSubtle)
-
-            switch section {
-            case .board:
-                TaskNoticeBoardView(model: model)
-            case .forum:
-                ProjectForumView(model: model)
-            case .characters:
-                OCInteractionView(model: model)
+            if showsContributionDetail {
+                contributionDetailLightbox
+                    .zIndex(100)
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
         }
-        .background(AtlasCanvasBackground())
+        .background(AtlasCanvasBackground(animated: true))
+    }
+
+    private func contributionText(_ score: Double) -> String {
+        score.rounded() == score ? "\(Int(score))" : String(format: "%.1f", score)
+    }
+
+    private var contributionDetailLightbox: some View {
+        let contributor = model.contributors(in: model.activeWorldID)
+            .first(where: { $0.id == model.currentUserID })
+        let moduleScores = contributor?.moduleScores
+            .sorted(by: { $0.key.rawValue < $1.key.rawValue }) ?? []
+
+        return ZStack {
+            Color.black.opacity(0.72)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        showsContributionDetail = false
+                    }
+                }
+
+            VStack(alignment: .leading, spacing: AtlasSpacing.l) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("您在本企划中的贡献度")
+                            .font(AtlasFont.title)
+                        Text(model.activeWorld.name)
+                            .font(AtlasFont.monoSmall)
+                            .foregroundStyle(AtlasColor.textTertiary)
+                    }
+                    Spacer()
+                    Text(contributionText(model.activeContributionScore))
+                        .font(.system(size: 34, weight: .semibold, design: .monospaced))
+                }
+
+                Divider().overlay(AtlasColor.borderSubtle)
+
+                if moduleScores.isEmpty {
+                    Text("还没有可计分的互动创作。完成一次符合规则的投稿后，明细会显示在这里。")
+                        .font(AtlasFont.body)
+                        .foregroundStyle(AtlasColor.textSecondary)
+                } else {
+                    ForEach(moduleScores, id: \.key) { module, score in
+                        HStack {
+                            Text(module.rawValue).font(AtlasFont.label)
+                            Spacer()
+                            Text(contributionText(score))
+                                .font(AtlasFont.mono)
+                                .foregroundStyle(AtlasColor.textSecondary)
+                        }
+                    }
+                }
+
+                Text("分数仅在当前企划内累计，并按同一对象的连续投稿次数应用递减系数。")
+                    .font(AtlasFont.caption)
+                    .foregroundStyle(AtlasColor.textTertiary)
+            }
+            .padding(AtlasSpacing.xl)
+            .frame(width: 470)
+            .atlasFloatingGlass(
+                RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
+            )
+            .onTapGesture { }
+        }
     }
 }
 
 private struct TaskNoticeBoardView: View {
     @ObservedObject var model: AtlasAppModel
+
+    private var boardHeight: CGFloat {
+        let rowCount = max(1, Int(ceil(Double(availableTasks.count) / 4.0)))
+        return 440 + CGFloat(rowCount - 1) * 266
+    }
 
     private var availableTasks: [AtlasTask] {
         model.tasks.filter { $0.state == .open && !model.joinedTaskIDs.contains($0.id) }
@@ -92,7 +208,7 @@ private struct TaskNoticeBoardView: View {
                         Text("企划任务布告栏").font(AtlasFont.title)
                         Text((model.activeRole == .participant || model.activeRole == .owner) &&
                              model.canWriteActiveWorld
-                             ? "点击便利贴，把布告从软木板上揭下来，即表示接受任务。"
+                             ? "点击便利贴，把布告揭下来，即表示接受任务。"
                              : "企主与参企者都可以揭下任务；已结企后布告栏仅供浏览。")
                             .font(AtlasFont.body)
                             .foregroundStyle(AtlasColor.textSecondary)
@@ -102,45 +218,27 @@ private struct TaskNoticeBoardView: View {
                         Button {
                             model.activeSheet = .newTask
                         } label: {
-                            AtlasButtonLabel(title: "钉一张新布告", systemImage: "pin")
+                            AtlasButtonLabel(title: "贴一张新布告", systemImage: "pin")
                         }
                         .buttonStyle(.atlas(.primary))
                     }
                 }
 
                 ZStack {
-                    RoundedRectangle(cornerRadius: 28)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.24, green: 0.12, blue: 0.07),
-                                    Color(red: 0.12, green: 0.065, blue: 0.045)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                    Canvas { context, size in
-                        for x in stride(from: 18.0, through: size.width, by: 34) {
-                            for y in stride(from: 20.0, through: size.height, by: 31) {
-                                let dot = CGRect(x: x, y: y, width: 2, height: 2)
-                                context.fill(Path(ellipseIn: dot), with: .color(.white.opacity(0.055)))
-                            }
-                        }
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 28))
-
                     if availableTasks.isEmpty {
                         VStack(spacing: AtlasSpacing.m) {
                             Image(systemName: "pin.slash")
                                 .font(.system(size: 30, weight: .light))
                             Text("布告都已经被揭下").font(AtlasFont.heading)
-                            Text("已承接任务在软木板下方。")
+                            Text("已承接任务在布告栏下方。")
                                 .font(AtlasFont.caption).foregroundStyle(AtlasColor.textTertiary)
                         }
                     } else {
                         LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 230), spacing: 30)],
+                            columns: Array(
+                                repeating: GridItem(.flexible(minimum: 200), spacing: 30),
+                                count: 4
+                            ),
                             spacing: 36
                         ) {
                             ForEach(Array(availableTasks.enumerated()), id: \.element.id) { index, task in
@@ -159,12 +257,16 @@ private struct TaskNoticeBoardView: View {
                         .padding(42)
                     }
                 }
-                .frame(minHeight: 440)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28)
-                        .stroke(Color(red: 0.43, green: 0.23, blue: 0.13), lineWidth: 8)
+                .frame(maxWidth: .infinity)
+                .frame(height: boardHeight)
+                .animation(.spring(response: 0.44, dampingFraction: 0.86), value: boardHeight)
+                .background {
+                    AtlasCanvasBackground(animated: true)
+                        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                }
+                .atlasFloatingGlass(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
                 )
-                .shadow(color: .black.opacity(0.42), radius: 24, y: 14)
 
                 VStack(alignment: .leading, spacing: AtlasSpacing.m) {
                     HStack {
@@ -226,7 +328,6 @@ private struct TaskNoticeBoardView: View {
                 }
             }
             .padding(AtlasSpacing.xxl)
-            .frame(maxWidth: 1180)
             .frame(maxWidth: .infinity)
         }
     }
@@ -253,11 +354,6 @@ private struct TaskStickyNote: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.28, execute: accept)
         } label: {
             VStack(alignment: .leading, spacing: 12) {
-                Circle()
-                    .fill(Color(red: 0.68, green: 0.08, blue: 0.08))
-                    .frame(width: 13, height: 13)
-                    .shadow(color: .black.opacity(0.35), radius: 3, y: 2)
-                    .frame(maxWidth: .infinity)
                 Text(task.title)
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                 Text(task.summary)
@@ -273,6 +369,7 @@ private struct TaskStickyNote: View {
             }
             .foregroundStyle(Color.black.opacity(0.76))
             .padding(18)
+            .padding(.top, 8)
             .frame(maxWidth: .infinity, minHeight: 230, alignment: .topLeading)
             .background(noteColor)
             .overlay(alignment: .top) {
@@ -707,10 +804,24 @@ private struct ProjectForumView: View {
     }
 }
 
+private struct OCCharacterComment: Identifiable {
+    let id = UUID()
+    let characterID: String
+    let author: String
+    let body: String
+}
+
 private struct OCInteractionView: View {
     @ObservedObject var model: AtlasAppModel
     @State private var selectedID = AtlasCharacterProfile.samples[0].id
     @State private var comment = ""
+    @State private var comments: [OCCharacterComment] = [
+        .init(
+            characterID: AtlasCharacterProfile.samples[0].id,
+            author: "白昼",
+            body: "如果想把伊莱放进长线剧情，可以先把关键转折发给我确认。"
+        )
+    ]
 
     private var selected: AtlasCharacterProfile {
         AtlasCharacterProfile.samples.first { $0.id == selectedID } ?? AtlasCharacterProfile.samples[0]
@@ -752,40 +863,47 @@ private struct OCInteractionView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: AtlasSpacing.xl) {
-                        HStack(alignment: .top, spacing: AtlasSpacing.l) {
-                            CharacterPortraitColumn(
-                                character: selected,
-                                width: 224,
-                                imageHeight: 336,
-                                canEditFields: selected.id == "char-cen"
-                            )
-                            VStack(alignment: .leading, spacing: AtlasSpacing.s) {
-                                Text(selected.name).font(AtlasFont.display)
-                                Text("\(selected.owner) · \(selected.role)")
-                                    .font(AtlasFont.monoSmall).foregroundStyle(AtlasColor.textTertiary)
-                                Text(selected.summary).font(AtlasFont.body).foregroundStyle(AtlasColor.textSecondary)
-                                Label(selected.location, systemImage: "mappin").font(AtlasFont.caption)
-                                if model.activeRole == .participant &&
-                                    model.canWriteActiveWorld &&
-                                    selected.id != "char-cen" {
-                                    Button {
-                                        model.selectedCharacterID = selected.id
-                                        model.activeSheet = .interactionInvite
-                                    } label: {
-                                        AtlasButtonLabel(title: "为这个 OC 发起互动创作", systemImage: "sparkles")
-                                    }
-                                    .buttonStyle(.atlas(.primary))
+                        CharacterPortraitBanner(
+                            character: selected
+                        )
+
+                        VStack(alignment: .leading, spacing: AtlasSpacing.s) {
+                            Text(selected.name).font(AtlasFont.display)
+                            Text("\(selected.owner) · \(selected.role)")
+                                .font(AtlasFont.monoSmall).foregroundStyle(AtlasColor.textTertiary)
+                            Text(selected.summary).font(AtlasFont.body).foregroundStyle(AtlasColor.textSecondary)
+                            Label(selected.location, systemImage: "mappin").font(AtlasFont.caption)
+                            if model.activeRole == .participant &&
+                                model.canWriteActiveWorld &&
+                                selected.id != "char-cen" {
+                                Button {
+                                    model.selectedCharacterID = selected.id
+                                    model.activeSheet = .interactionInvite
+                                } label: {
+                                    AtlasButtonLabel(title: "为这个 OC 发起互动创作", systemImage: "sparkles")
                                 }
+                                .buttonStyle(.atlas(.primary))
                             }
                         }
+
+                        CharacterCustomFields(
+                            character: selected,
+                            canEditFields: selected.id == "char-cen"
+                        )
 
                         CharacterInteractionDisclosureGroup(character: selected)
 
                         Divider().overlay(AtlasColor.borderSubtle)
                         Text("角色留言").font(AtlasFont.heading)
-                        Text("白昼：如果想把伊莱放进长线剧情，可以先把关键转折发给我确认。")
-                            .font(AtlasFont.body).foregroundStyle(AtlasColor.textSecondary)
-                            .padding(AtlasSpacing.m).atlasGlass(RoundedRectangle(cornerRadius: AtlasRadius.control))
+                        ForEach(comments.filter { $0.characterID == selected.id }) { message in
+                            HStack(alignment: .firstTextBaseline, spacing: AtlasSpacing.s) {
+                                Text("\(message.author)：")
+                                    .font(AtlasFont.label)
+                                Text(message.body)
+                                    .font(AtlasFont.body)
+                                    .foregroundStyle(AtlasColor.textSecondary)
+                            }
+                        }
                         if model.activeRole != .visitor && model.canWriteActiveWorld {
                             HStack {
                                 TextField("询问设定、提出互动想法……", text: $comment)
@@ -793,11 +911,22 @@ private struct OCInteractionView: View {
                                     .padding(AtlasSpacing.m)
                                     .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: AtlasRadius.control))
                                 Button("发布") {
+                                    let body = comment.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    guard !body.isEmpty else { return }
+                                    withAnimation(.easeInOut(duration: 0.22)) {
+                                        comments.append(
+                                            .init(
+                                                characterID: selected.id,
+                                                author: "岑",
+                                                body: body
+                                            )
+                                        )
+                                    }
                                     model.showToast("留言已发布")
                                     comment = ""
                                 }
                                 .buttonStyle(.atlas(.primary))
-                                .disabled(comment.isEmpty)
+                                .disabled(comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             }
                         }
                     }

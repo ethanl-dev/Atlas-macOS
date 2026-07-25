@@ -451,7 +451,7 @@ struct NewTaskSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            sheetHeader("发布任务", subtitle: "先建立草稿，再公开招募", dismiss: dismiss)
+            sheetHeader("贴出任务布告", subtitle: "填写完成后直接公开招募", dismiss: dismiss)
             Divider().overlay(AtlasColor.borderSubtle)
 
             VStack(alignment: .leading, spacing: AtlasSpacing.l) {
@@ -509,12 +509,21 @@ struct NewTaskSheet: View {
             HStack {
                 Spacer()
                 Button {
-                    model.showToast("任务草稿已创建")
+                    model.publishTask(
+                        title: title,
+                        summary: summary,
+                        capacity: Int(capacity),
+                        objectIDs: ["LOC-014"]
+                    )
                     dismiss()
                 } label: {
-                    AtlasButtonLabel(title: "创建任务草稿", systemImage: "checkmark")
+                    AtlasButtonLabel(title: "贴到布告栏", systemImage: "checkmark")
                 }
                 .buttonStyle(.atlas(.primary))
+                .disabled(
+                    title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                    summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
             }
             .padding(AtlasSpacing.l)
         }

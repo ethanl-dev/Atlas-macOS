@@ -66,10 +66,41 @@ struct RootView: View {
         }
 
             IrisCurtain(iris: iris)
+
+            if model.activeSheet == .characterCard {
+                Color.black.opacity(0.58)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeOut(duration: 0.20)) {
+                            model.activeSheet = nil
+                        }
+                    }
+                    .transition(.opacity)
+                    .zIndex(20)
+
+                CharacterCardSheet(model: model)
+                    .frame(maxWidth: 1040, maxHeight: 820)
+                    .padding(.horizontal, 48)
+                    .padding(.vertical, 34)
+                    .contentShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                    .zIndex(21)
+            }
         }
-        .sheet(item: $model.activeSheet) { sheet in
+        .animation(.spring(response: 0.38, dampingFraction: 0.88), value: model.activeSheet == .characterCard)
+        .sheet(item: nonCharacterSheet) { sheet in
             sheetView(sheet)
         }
+    }
+
+    private var nonCharacterSheet: Binding<AtlasSheet?> {
+        Binding(
+            get: {
+                model.activeSheet == .characterCard ? nil : model.activeSheet
+            },
+            set: { model.activeSheet = $0 }
+        )
     }
 
     private var projectShell: some View {

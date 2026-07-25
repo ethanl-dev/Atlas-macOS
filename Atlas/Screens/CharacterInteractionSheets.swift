@@ -37,7 +37,6 @@ private struct FlowLayout: Layout {
 
 struct CharacterCardSheet: View {
     @ObservedObject var model: AtlasAppModel
-    @Environment(\.dismiss) private var dismiss
 
     private var character: AtlasCharacterProfile {
         AtlasCharacterProfile.samples.first(where: { $0.id == model.selectedCharacterID }) ?? AtlasCharacterProfile.samples[0]
@@ -46,33 +45,30 @@ struct CharacterCardSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AtlasSpacing.xl) {
-                HStack(alignment: .top, spacing: AtlasSpacing.xl) {
-                    CharacterPortraitColumn(
-                        character: character,
-                        width: 248,
-                        imageHeight: 372,
-                        canEditFields: character.id == "char-cen"
-                    )
-                    VStack(alignment: .leading, spacing: AtlasSpacing.m) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(character.name).font(AtlasFont.display)
-                                Text("\(character.owner) · \(character.role)")
-                                    .font(AtlasFont.monoSmall)
-                                    .foregroundStyle(AtlasColor.textTertiary)
-                            }
-                            Spacer()
-                            Button { dismiss() } label: { Image(systemName: "xmark") }
-                                .buttonStyle(.atlas(.glass))
-                        }
-                        Text(character.summary)
-                            .font(AtlasFont.body)
-                            .foregroundStyle(AtlasColor.textSecondary)
-                            .lineSpacing(5)
+                CharacterPortraitBanner(
+                    character: character
+                )
+
+                VStack(alignment: .leading, spacing: AtlasSpacing.m) {
+                    Text(character.name).font(AtlasFont.display)
+                    Text("\(character.owner) · \(character.role)")
+                        .font(AtlasFont.monoSmall)
+                        .foregroundStyle(AtlasColor.textTertiary)
+                    Text(character.summary)
+                        .font(AtlasFont.body)
+                        .foregroundStyle(AtlasColor.textSecondary)
+                        .lineSpacing(5)
+                    HStack(spacing: AtlasSpacing.xl) {
                         Label(character.location, systemImage: "mappin")
                         Label(character.organization, systemImage: "person.3")
                     }
+                    .font(AtlasFont.caption)
                 }
+
+                CharacterCustomFields(
+                    character: character,
+                    canEditFields: character.id == "char-cen"
+                )
 
                 CharacterInteractionDisclosureGroup(character: character)
 
@@ -88,14 +84,65 @@ struct CharacterCardSheet: View {
                     }
                 }
             }
-            .padding(AtlasSpacing.xxl)
+            .frame(maxWidth: 820, alignment: .leading)
+            .padding(.horizontal, 40)
+            .padding(.vertical, 32)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
-        .frame(minWidth: 760, minHeight: 680)
         .background(AtlasCanvasBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(Color.white.opacity(0.22), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.55), radius: 42, y: 20)
     }
 }
 
-struct CharacterPortraitColumn: View {
+struct CharacterPortraitBanner: View {
+    let character: AtlasCharacterProfile
+
+    var body: some View {
+        Image(characterImageName)
+            .resizable()
+            .scaledToFit()
+            .frame(maxWidth: 760)
+            .clipShape(RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous))
+            .overlay {
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0.50),
+                    .init(color: .black.opacity(0.22), location: 0.72),
+                    .init(color: .black.opacity(0.86), location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .clipShape(RoundedRectangle(cornerRadius: AtlasRadius.card))
+            .allowsHitTesting(false)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous)
+                .stroke(Color.white.opacity(0.20), lineWidth: 1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, AtlasSpacing.l)
+    }
+
+    private var characterImageName: String {
+        let images = [
+            "PixabayBanner",
+            "PixabayLandscape2",
+            "PixabayLandscape3",
+            "PixabayLandscape4",
+            "PixabayLandscape5",
+            "PixabayLandscape6"
+        ]
+        return images[abs(character.id.hashValue) % images.count]
+    }
+}
+
+struct CharacterCustomFields: View {
     struct CustomField: Identifiable {
         let id = UUID()
         var label: String
@@ -103,8 +150,6 @@ struct CharacterPortraitColumn: View {
     }
 
     let character: AtlasCharacterProfile
-    let width: CGFloat
-    let imageHeight: CGFloat
     let canEditFields: Bool
     @State private var fields: [CustomField] = [
         .init(label: "常用称呼", value: "可以称呼我为「小岑」"),
@@ -113,55 +158,44 @@ struct CharacterPortraitColumn: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: AtlasSpacing.m) {
-            CharacterPortrait(
-                seed: abs(character.id.hashValue % 9),
-                initials: String(character.name.prefix(1))
-            )
-            .frame(width: width, height: imageHeight)
-
-            VStack(alignment: .leading, spacing: AtlasSpacing.s) {
-                ForEach($fields) { $field in
-                    if canEditFields {
-                        VStack(alignment: .leading, spacing: 3) {
-                            TextField("字段名", text: $field.label)
-                                .font(AtlasFont.monoSmall)
-                                .foregroundStyle(AtlasColor.textTertiary)
-                            TextField("字段内容", text: $field.value)
-                                .font(AtlasFont.caption)
-                        }
-                        .textFieldStyle(.plain)
-                    } else {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(field.label)
-                                .font(AtlasFont.monoSmall)
-                                .foregroundStyle(AtlasColor.textTertiary)
-                            Text(field.value)
-                                .font(AtlasFont.caption)
-                                .foregroundStyle(AtlasColor.textPrimary)
-                        }
-                    }
-                }
-
+            ForEach($fields) { $field in
                 if canEditFields {
-                    Button {
-                        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-                            fields.append(.init(label: "新字段", value: "点击填写内容"))
-                        }
-                    } label: {
-                        Label("添加字段", systemImage: "plus")
+                    VStack(alignment: .leading, spacing: 5) {
+                        TextField("字段名", text: $field.label)
+                            .font(AtlasFont.monoSmall)
+                            .foregroundStyle(AtlasColor.textTertiary)
+                        TextField("字段内容", text: $field.value)
                             .font(AtlasFont.caption)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(AtlasColor.textSecondary)
+                    .textFieldStyle(.plain)
+                } else {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(field.label)
+                            .font(AtlasFont.monoSmall)
+                            .foregroundStyle(AtlasColor.textTertiary)
+                        Text(field.value)
+                            .font(AtlasFont.caption)
+                            .foregroundStyle(AtlasColor.textPrimary)
+                    }
                 }
             }
-            .padding(AtlasSpacing.m)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .atlasFrostedPanel(
-                RoundedRectangle(cornerRadius: AtlasRadius.control, style: .continuous)
-            )
+
+            if canEditFields {
+                Button {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                        fields.append(.init(label: "新字段", value: "点击填写内容"))
+                    }
+                } label: {
+                    Label("添加字段", systemImage: "plus")
+                        .font(AtlasFont.caption)
+                        .frame(minHeight: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AtlasColor.textSecondary)
+            }
         }
-        .frame(width: width, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -169,27 +203,25 @@ struct CharacterInteractionDisclosureGroup: View {
     let character: AtlasCharacterProfile
 
     var body: some View {
-        VStack(spacing: AtlasSpacing.m) {
-            HStack(alignment: .top, spacing: AtlasSpacing.m) {
-                CharacterDisclosurePanel(title: "适合互动", symbol: "checkmark") {
-                    VStack(alignment: .leading, spacing: AtlasSpacing.s) {
-                        ForEach(character.dos, id: \.self) { item in
-                            Label(item, systemImage: "circle.fill")
-                        }
+        HStack(alignment: .top, spacing: AtlasSpacing.m) {
+            CharacterDisclosurePanel(title: "适合互动", symbol: "checkmark") {
+                VStack(alignment: .leading, spacing: AtlasSpacing.s) {
+                    ForEach(character.dos, id: \.self) { item in
+                        Label(item, systemImage: "circle.fill")
                     }
-                    .font(AtlasFont.caption)
-                    .foregroundStyle(AtlasColor.textSecondary)
                 }
+                .font(AtlasFont.caption)
+                .foregroundStyle(AtlasColor.textSecondary)
+            }
 
-                CharacterDisclosurePanel(title: "不允许触碰", symbol: "hand.raised") {
-                    VStack(alignment: .leading, spacing: AtlasSpacing.s) {
-                        ForEach(character.donts, id: \.self) { item in
-                            Label(item, systemImage: "circle.fill")
-                        }
+            CharacterDisclosurePanel(title: "不允许触碰", symbol: "hand.raised") {
+                VStack(alignment: .leading, spacing: AtlasSpacing.s) {
+                    ForEach(character.donts, id: \.self) { item in
+                        Label(item, systemImage: "circle.fill")
                     }
-                    .font(AtlasFont.caption)
-                    .foregroundStyle(AtlasColor.textSecondary)
                 }
+                .font(AtlasFont.caption)
+                .foregroundStyle(AtlasColor.textSecondary)
             }
 
             CharacterDisclosurePanel(title: "全局创作许可", symbol: "checklist") {
@@ -251,15 +283,18 @@ private struct CharacterDisclosurePanel<Content: View>: View {
                     Spacer()
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 40, height: 40)
+                        .contentShape(Rectangle())
                 }
                 .foregroundStyle(AtlasColor.textPrimary)
                 .padding(.horizontal, AtlasSpacing.l)
                 .frame(height: 48)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .atlasFrostedPanel(shape)
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+        .atlasP1Glass(shape)
         .animation(.spring(response: 0.44, dampingFraction: 0.86), value: expanded)
     }
 }

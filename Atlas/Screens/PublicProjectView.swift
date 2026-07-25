@@ -4,6 +4,7 @@ struct PublicProjectView: View {
     @ObservedObject var model: AtlasAppModel
     @State private var tab = PublicTab.detail
     @State private var selectedWork: AtlasAssetPreview?
+    @State private var contributorsExpanded = false
 
     var body: some View {
         ZStack {
@@ -301,6 +302,8 @@ struct PublicProjectView: View {
 
     private var persistentInfoRail: some View {
         VStack(spacing: AtlasSpacing.m) {
+            contributorCard
+
             infoCard("AI 使用边界", symbol: "checkmark.shield", tint: AtlasColor.auroraMint) {
                 policyRow("允许", detail: "灵感发散、资料整理、文本校对")
                 policyRow("需标注", detail: "包含 AI 辅助的公开文本")
@@ -321,6 +324,102 @@ struct PublicProjectView: View {
         }
         .padding(AtlasSpacing.l)
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private var contributorCard: some View {
+        let contributors = model.contributors(in: model.activeWorldID)
+        let collapsedLimit = 4
+        let visible = contributorsExpanded ? contributors : Array(contributors.prefix(collapsedLimit))
+        let hasOverflow = contributors.count > collapsedLimit
+
+        return VStack(alignment: .leading, spacing: AtlasSpacing.m) {
+            HStack {
+                Text("企划贡献者")
+                    .font(AtlasFont.heading)
+                Spacer()
+                Text("\(contributors.count) 人")
+                    .font(AtlasFont.monoSmall)
+                    .foregroundStyle(AtlasColor.textTertiary)
+                if hasOverflow {
+                    Button {
+                        toggleContributors()
+                    } label: {
+                        Image(systemName: contributorsExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .frame(width: 42, height: 42)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(contributorsExpanded ? "收起贡献者" : "展开全部贡献者")
+                }
+            }
+
+            LazyVGrid(
+                columns: Array(
+                    repeating: GridItem(.flexible(), spacing: AtlasSpacing.s),
+                    count: 5
+                ),
+                alignment: .leading,
+                spacing: AtlasSpacing.m
+            ) {
+                ForEach(visible) { contributor in
+                    Button {
+                        model.openContributorProfile(contributor.id)
+                    } label: {
+                        contributorAvatar(contributor)
+                    }
+                    .buttonStyle(.plain)
+                    .help("查看\(contributor.displayName)的个人主页")
+                }
+
+                if hasOverflow && !contributorsExpanded {
+                    Button {
+                        toggleContributors()
+                    } label: {
+                        ZStack {
+                            Circle().fill(Color.white.opacity(0.08))
+                            Text("…")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundStyle(AtlasColor.textTertiary)
+                        }
+                        .frame(width: 42, height: 42)
+                    }
+                    .buttonStyle(.plain)
+                    .help("展开全部贡献者")
+                }
+            }
+        }
+        .padding(AtlasSpacing.l)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .atlasFloatingGlass(
+            RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
+        )
+    }
+
+    private func toggleContributors() {
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.84)) {
+            contributorsExpanded.toggle()
+        }
+    }
+
+    private func contributorAvatar(_ contributor: AtlasProjectContributor) -> some View {
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: contributor.isOwner
+                            ? [AtlasColor.auroraAmber, AtlasColor.auroraRose]
+                            : [AtlasColor.auroraViolet, AtlasColor.auroraMint],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Text(String(contributor.displayName.prefix(1)))
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 42, height: 42)
+        .overlay(Circle().stroke(Color.white.opacity(0.45), lineWidth: 1))
     }
 
     private var characterGallery: some View {

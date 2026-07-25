@@ -37,7 +37,7 @@ struct AtlasProfileMenu: View {
         VStack(alignment: .leading, spacing: AtlasSpacing.m) {
             Button {
                 withAnimation(.snappy(duration: 0.32)) {
-                    model.navigate(to: .profile)
+                    model.openCurrentUserProfile()
                 }
                 presented = false
             } label: {

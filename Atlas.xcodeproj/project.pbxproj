@@ -6,6 +6,20 @@
 	objectVersion = 71;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		B20000000000000000000005 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* XCTest.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B20000000000000000000010 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000010 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000006;
+			remoteInfo = Atlas;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		A10000000000000000000002 /* Atlas.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Atlas.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000002 /* AtlasAgentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AtlasAgentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -34,10 +48,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
-
-/* Begin PBXBuildFile section */
-		B20000000000000000000005 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* XCTest.framework */; };
-/* End PBXBuildFile section */
 
 /* Begin PBXGroup section */
 		A10000000000000000000004 = {
@@ -104,24 +114,6 @@
 		};
 /* End PBXNativeTarget section */
 
-/* Begin PBXContainerItemProxy section */
-		B20000000000000000000010 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = A10000000000000000000010 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = A10000000000000000000006;
-			remoteInfo = Atlas;
-		};
-/* End PBXContainerItemProxy section */
-
-/* Begin PBXTargetDependency section */
-		B20000000000000000000009 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = A10000000000000000000006 /* Atlas */;
-			targetProxy = B20000000000000000000010 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
 /* Begin PBXProject section */
 		A10000000000000000000010 /* Project object */ = {
 			isa = PBXProject;
@@ -130,13 +122,13 @@
 				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
-				A10000000000000000000006 = {
-					CreatedOnToolsVersion = 26.0;
-				};
-				B20000000000000000000006 = {
-					CreatedOnToolsVersion = 26.0;
-					TestTargetID = A10000000000000000000006;
-				};
+					A10000000000000000000006 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					B20000000000000000000006 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = A10000000000000000000006;
+					};
 				};
 			};
 			buildConfigurationList = A10000000000000000000011 /* Build configuration list for PBXProject "Atlas" */;
@@ -185,6 +177,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B20000000000000000000009 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000006 /* Atlas */;
+			targetProxy = B20000000000000000000010 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A10000000000000000000012 /* Debug */ = {

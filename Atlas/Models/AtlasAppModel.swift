@@ -110,6 +110,56 @@ enum WorldCollection: String {
     case joined = "我加入的世界"
 }
 
+enum AtlasContributionModule: String, CaseIterable, Codable {
+    case writing = "文字"
+    case illustration = "绘画"
+    case video = "影像"
+    case model3D = "3D"
+    case craft = "手工"
+    case music = "音乐"
+    case program = "程序"
+    case organization = "组织"
+}
+
+/// 一条可审计的企划内贡献记录。分数只在 `worldID` 内汇总，不进入用户的全局账户。
+struct AtlasContributionEvent: Identifiable, Hashable {
+    let id: String
+    let worldID: String
+    let userID: String
+    let displayName: String
+    let avatarSeed: Int
+    let module: AtlasContributionModule
+    let targetID: String
+    let sequenceForTarget: Int
+    let scalePoints: Double
+    let completionPoints: Double
+    let specialtyPoints: Double
+    let bonusPoints: Double
+    let isPolished: Bool
+    let isSeasonal: Bool
+    var isOwner = false
+    var isVoided = false
+
+    var score: Double {
+        guard !isVoided else { return 0 }
+        let coefficients = [1.0, 0.7, 0.5, 0.3]
+        guard sequenceForTarget > 0, sequenceForTarget <= coefficients.count else { return 0 }
+        let base = scalePoints + completionPoints + specialtyPoints
+        let decayed = base * coefficients[sequenceForTarget - 1] + bonusPoints
+        let polished = isPolished ? decayed * 1.5 : decayed
+        return isSeasonal ? polished * 2 : polished
+    }
+}
+
+struct AtlasProjectContributor: Identifiable, Hashable {
+    let id: String
+    let displayName: String
+    let avatarSeed: Int
+    let isOwner: Bool
+    let score: Double
+    let moduleScores: [AtlasContributionModule: Double]
+}
+
 struct AtlasWorld: Identifiable, Hashable {
     let id: String
     var name: String
@@ -203,6 +253,8 @@ struct AtlasSubmission: Identifiable {
 
 @MainActor
 final class AtlasAppModel: ObservableObject {
+    let currentUserID = "user-cen"
+    @Published var selectedProfileUserID = "user-cen"
     @Published var destination: AtlasDestination = .discover
     @Published var accessMode: ProjectAccessMode = .participate
     @Published var activeWorldID = "mist-letters"
@@ -296,7 +348,7 @@ final class AtlasAppModel: ObservableObject {
               symbol: "building.2")
     ]
 
-    let tasks: [AtlasTask] = [
+    @Published var tasks: [AtlasTask] = [
         .init(id: "task-night-watch", title: "夜航守望",
               summary: "在潮声退去前点亮全部白塔，结果将改变雾港开放状态。",
               state: .open, participants: 6, capacity: 8,
@@ -337,6 +389,39 @@ final class AtlasAppModel: ObservableObject {
     @Published private(set) var wikiSubmissions: [AtlasSubmission] = []
     @Published private(set) var addedWikiObjects: [WorldObject] = []
     @Published var characterApprovals: [CharacterApproval] = CharacterApproval.samples
+    /// 已归档认证的企划在当前账号会话中永久只读；值为链上交易哈希。
+    @Published private(set) var certifiedWorldHashes: [String: String] = [:]
+    @Published var contributionEvents: [AtlasContributionEvent] = [
+        .init(id: "C-MIST-001", worldID: "mist-letters", userID: "user-cen",
+              displayName: "岑", avatarSeed: 1, module: .writing, targetID: "CHR-027",
+              sequenceForTarget: 1, scalePoints: 3, completionPoints: 3,
+              specialtyPoints: 1, bonusPoints: 2, isPolished: true, isSeasonal: false,
+              isOwner: true),
+        .init(id: "C-MIST-002", worldID: "mist-letters", userID: "user-daylight",
+              displayName: "白昼", avatarSeed: 4, module: .illustration, targetID: "CHR-CEN",
+              sequenceForTarget: 1, scalePoints: 3, completionPoints: 5,
+              specialtyPoints: 0, bonusPoints: 1, isPolished: false, isSeasonal: false),
+        .init(id: "C-MIST-003", worldID: "mist-letters", userID: "user-eli",
+              displayName: "伊莱", avatarSeed: 2, module: .video, targetID: "EVT-009",
+              sequenceForTarget: 1, scalePoints: 2, completionPoints: 3,
+              specialtyPoints: 1, bonusPoints: 2, isPolished: false, isSeasonal: true),
+        .init(id: "C-MIST-004", worldID: "mist-letters", userID: "user-linwu",
+              displayName: "林雾", avatarSeed: 5, module: .music, targetID: "LOC-014",
+              sequenceForTarget: 1, scalePoints: 2, completionPoints: 3,
+              specialtyPoints: 0, bonusPoints: 2, isPolished: true, isSeasonal: false),
+        .init(id: "C-MIST-005", worldID: "mist-letters", userID: "user-autumn",
+              displayName: "秋庭", avatarSeed: 3, module: .illustration, targetID: "CHR-027",
+              sequenceForTarget: 2, scalePoints: 3, completionPoints: 4,
+              specialtyPoints: 0, bonusPoints: 1, isPolished: false, isSeasonal: false),
+        .init(id: "C-MIST-006", worldID: "mist-letters", userID: "user-island",
+              displayName: "岛屿", avatarSeed: 6, module: .program, targetID: "WORLD-MIST",
+              sequenceForTarget: 1, scalePoints: 2, completionPoints: 2,
+              specialtyPoints: 0, bonusPoints: 2, isPolished: false, isSeasonal: false),
+        .init(id: "C-NINTH-001", worldID: "ninth-station", userID: "user-cen",
+              displayName: "岑", avatarSeed: 1, module: .writing, targetID: "CHR-N09",
+              sequenceForTarget: 1, scalePoints: 2, completionPoints: 2,
+              specialtyPoints: 1, bonusPoints: 1, isPolished: false, isSeasonal: false)
+    ]
 
     var activeWorld: AtlasWorld {
         worlds.first(where: { $0.id == activeWorldID }) ?? worlds[0]
@@ -346,12 +431,100 @@ final class AtlasAppModel: ObservableObject {
         role(in: activeWorldID)
     }
 
+    var activeContributionScore: Double {
+        contributionScore(worldID: activeWorldID, userID: currentUserID)
+    }
+
+    func contributionScore(worldID: String, userID: String) -> Double {
+        contributionEvents
+            .filter { $0.worldID == worldID && $0.userID == userID }
+            .reduce(0) { $0 + $1.score }
+    }
+
+    func profileIdentity(for userID: String) -> (name: String, avatarSeed: Int) {
+        if userID == currentUserID { return ("岑", 1) }
+        if let event = contributionEvents.first(where: { $0.userID == userID }) {
+            return (event.displayName, event.avatarSeed)
+        }
+        return ("创作者", 0)
+    }
+
+    func openContributorProfile(_ userID: String) {
+        selectedProfileUserID = userID
+        destination = .profile
+    }
+
+    func openCurrentUserProfile() {
+        selectedProfileUserID = currentUserID
+        destination = .profile
+    }
+
+    func contributors(in worldID: String) -> [AtlasProjectContributor] {
+        let grouped = Dictionary(grouping: contributionEvents.filter {
+            $0.worldID == worldID && !$0.isVoided
+        }, by: \.userID)
+
+        var contributors: [AtlasProjectContributor] = grouped.compactMap { entry in
+            let (userID, events) = entry
+            guard let first = events.first else { return nil }
+            let modules = Dictionary(grouping: events, by: \.module)
+                .mapValues { $0.reduce(0) { $0 + $1.score } }
+            return AtlasProjectContributor(
+                id: userID,
+                displayName: first.displayName,
+                avatarSeed: first.avatarSeed,
+                isOwner: events.contains(where: { $0.isOwner }),
+                score: events.reduce(0) { $0 + $1.score },
+                moduleScores: modules
+            )
+        }
+
+        if !contributors.contains(where: { $0.isOwner }) {
+            let owner = ownerIdentity(in: worldID)
+            contributors.append(
+                AtlasProjectContributor(
+                    id: owner.id,
+                    displayName: owner.name,
+                    avatarSeed: owner.seed,
+                    isOwner: true,
+                    score: contributionScore(worldID: worldID, userID: owner.id),
+                    moduleScores: [:]
+                )
+            )
+        }
+
+        return contributors
+        .sorted {
+            if $0.isOwner != $1.isOwner { return $0.isOwner }
+            if $0.score != $1.score { return $0.score > $1.score }
+            return $0.displayName.localizedCompare($1.displayName) == .orderedAscending
+        }
+    }
+
+    private func ownerIdentity(in worldID: String) -> (id: String, name: String, seed: Int) {
+        if role(in: worldID) == .owner {
+            return (currentUserID, "岑", 1)
+        }
+        switch worldID {
+        case "ninth-station": return ("owner-nine", "站长", 7)
+        case "glasshouse": return ("owner-glass", "温室记录员", 8)
+        case "stellar-echo": return ("owner-stellar", "引航者", 9)
+        default: return ("owner-\(worldID)", "企主", abs(worldID.hashValue) % 10)
+        }
+    }
+
     var isActiveWorldArchived: Bool {
-        activeWorld.status == "已结企"
+        activeWorld.status == "已结企" || certifiedWorldHashes[activeWorld.id] != nil
     }
 
     var canWriteActiveWorld: Bool {
         !isActiveWorldArchived
+    }
+
+    func certifyWorld(_ worldID: String, transactionHash: String) {
+        guard role(in: worldID) == .owner,
+              worlds.first(where: { $0.id == worldID })?.status == "已结企" else { return }
+        certifiedWorldHashes[worldID] = transactionHash
     }
 
     var selectedObject: WorldObject {
@@ -491,6 +664,32 @@ final class AtlasAppModel: ObservableObject {
         joinedTaskIDs.insert(task.id)
         selectedTaskID = task.id
         showToast("已用当前角色加入「\(task.title)」")
+    }
+
+    func publishTask(title: String, summary: String, capacity: Int, objectIDs: [String]) {
+        guard canWriteActiveWorld, activeRole == .owner else {
+            showToast("当前状态不能发布任务")
+            return
+        }
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanSummary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty, !cleanSummary.isEmpty else {
+            showToast("请填写任务名称和说明")
+            return
+        }
+        tasks.insert(
+            AtlasTask(
+                id: "task-\(UUID().uuidString.lowercased())",
+                title: cleanTitle,
+                summary: cleanSummary,
+                state: .open,
+                participants: 0,
+                capacity: capacity,
+                objectIDs: objectIDs
+            ),
+            at: 0
+        )
+        showToast("布告已贴到任务栏")
     }
 
     func review(_ submissionID: String, result: AtlasSubmission.State) {
