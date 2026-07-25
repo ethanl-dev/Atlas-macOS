@@ -84,6 +84,22 @@ final class AgentBenchmarkTests: XCTestCase {
         XCTAssertFalse(proposal.cards[0].creativeAngle.isEmpty)
     }
 
+    func testEmptyModelInspirationFallsBackToVerifiedSourceCard() {
+        let cards = InspirationResearchService.cardsUsingVerifiedFallback(
+            [],
+            sources: [verifiedSource]
+        )
+        XCTAssertEqual(cards.count, 1)
+        XCTAssertEqual(cards.first?.source.url, verifiedSource.url)
+        XCTAssertFalse(cards.first?.fact.isEmpty ?? true)
+        XCTAssertFalse(cards.first?.creativeAngle.isEmpty ?? true)
+        XCTAssertTrue(cards.allSatisfy {
+            DeepSeekClient.containsChinese($0.title)
+                && DeepSeekClient.containsChinese($0.fact)
+                && DeepSeekClient.containsChinese($0.creativeAngle)
+        })
+    }
+
     func testModelInspirationParserRejectsUnknownSourceURL() {
         let json = """
         {"cards":[
@@ -94,6 +110,17 @@ final class AgentBenchmarkTests: XCTestCase {
         let cards = DeepSeekClient.parseInspirations(argumentsJSON: json, sources: [verifiedSource])
         XCTAssertEqual(cards.count, 1)
         XCTAssertEqual(cards.first?.title, "有效")
+    }
+
+    func testModelInspirationParserRejectsNonChineseVisibleContent() {
+        let json = """
+        {"cards":[
+          {"title":"Shallow water acoustics","fact":"Sound propagation changes with depth.","creative_angle":"Use this as a setting.","source_url":"https://doi.org/10.1000/atlas-test"}
+        ]}
+        """
+        XCTAssertTrue(
+            DeepSeekClient.parseInspirations(argumentsJSON: json, sources: [verifiedSource]).isEmpty
+        )
     }
 
     func testInspirationToolSchemaRequiresSourceURL() {
@@ -209,6 +236,11 @@ final class AgentBenchmarkTests: XCTestCase {
         let inspirations = try await client.proposeInspirations(query: "研究灵感", sources: [verifiedSource])
         XCTAssertFalse(inspirations.isEmpty)
         XCTAssertTrue(inspirations.allSatisfy { $0.source.url == verifiedSource.url })
+        XCTAssertTrue(inspirations.allSatisfy {
+            DeepSeekClient.containsChinese($0.title)
+                && DeepSeekClient.containsChinese($0.fact)
+                && DeepSeekClient.containsChinese($0.creativeAngle)
+        })
     }
 
     private func makeObject(_ id: String, _ kind: BuilderKind, x: CGFloat, y: CGFloat) -> BuilderObject {

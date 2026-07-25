@@ -73,7 +73,14 @@ struct InspirationResearchService {
         let cards: [InspirationCard]
         if useModel && AgentConfig.isConfigured {
             do {
-                cards = try await DeepSeekClient().proposeInspirations(query: query, sources: sources)
+                let proposed = try await DeepSeekClient().proposeInspirations(query: query, sources: sources)
+                cards = Self.cardsUsingVerifiedFallback(proposed, sources: sources)
+                if proposed.isEmpty {
+                    AgentTelemetry.track(
+                        "agent_inspiration_model_fallback",
+                        properties: ["domain": domain.rawValue, "reason": "empty_cards"]
+                    )
+                }
             } catch {
                 AgentTelemetry.track("agent_inspiration_model_fallback", properties: ["domain": domain.rawValue])
                 cards = Self.localCards(from: sources)
@@ -87,6 +94,16 @@ struct InspirationResearchService {
             cards: cards,
             duration: Date().timeIntervalSince(startedAt)
         )
+    }
+
+    /// A model may return no usable cards when its source URL differs even
+    /// slightly from the verified URL. Never expose an empty "verified"
+    /// proposal: fall back to source-backed editorial cards instead.
+    static func cardsUsingVerifiedFallback(
+        _ proposed: [InspirationCard],
+        sources: [ResearchSource]
+    ) -> [InspirationCard] {
+        proposed.isEmpty ? localCards(from: sources) : proposed
     }
 
     static func inferDomain(_ text: String) -> InspirationDomain {
@@ -252,11 +269,11 @@ struct InspirationResearchService {
     }
 
     private static func localCards(from sources: [ResearchSource]) -> [InspirationCard] {
-        sources.prefix(3).map { source in
+        sources.prefix(3).enumerated().map { index, source in
             InspirationCard(
-                title: source.title,
-                fact: source.excerpt,
-                creativeAngle: "值得留意其中的节律与边界如何变化，再决定它能为创作打开哪一个问题。",
+                title: "\(source.domain.title)资料参照 \(index + 1)",
+                fact: "已找到一条与当前问题相关、可以回到原始页面核验的\(source.domain.title)资料。当前仅把它作为检索入口，不代替原文结论。",
+                creativeAngle: "可以追问：原文中哪一种可验证的变化机制，值得带回当前画布继续讨论？",
                 source: source
             )
         }
