@@ -194,6 +194,48 @@ private struct AtlasLightfallBackground: View {
 
     private func auroraVeils(time: TimeInterval) -> some View {
         ZStack {
+            auroraOrb(
+                colors: [
+                    Color(red: 0.12, green: 0.88, blue: 0.72).opacity(0.42),
+                    Color(red: 0.18, green: 0.46, blue: 1.0).opacity(0.20),
+                    .clear
+                ],
+                width: 0.62,
+                height: 0.42,
+                x: reflectedMotion(time * 0.17 + 0.2) * size.width * 0.27,
+                y: reflectedMotion(time * 0.11 + 1.4) * size.height * 0.24,
+                scale: 0.94 + 0.12 * CGFloat((sin(time * 0.46) + 1) / 2),
+                rotation: -12 + 9 * sin(time * 0.16)
+            )
+
+            auroraOrb(
+                colors: [
+                    Color(red: 0.68, green: 0.20, blue: 1.0).opacity(0.34),
+                    Color(red: 1.0, green: 0.22, blue: 0.58).opacity(0.16),
+                    .clear
+                ],
+                width: 0.54,
+                height: 0.38,
+                x: reflectedMotion(time * 0.13 + 2.5) * size.width * 0.30,
+                y: reflectedMotion(time * 0.19 + 0.8) * size.height * 0.27,
+                scale: 0.92 + 0.14 * CGFloat((cos(time * 0.39) + 1) / 2),
+                rotation: 15 - 11 * cos(time * 0.13)
+            )
+
+            auroraOrb(
+                colors: [
+                    Color(red: 0.10, green: 0.72, blue: 1.0).opacity(0.28),
+                    Color(red: 0.45, green: 1.0, blue: 0.72).opacity(0.13),
+                    .clear
+                ],
+                width: 0.46,
+                height: 0.34,
+                x: reflectedMotion(time * 0.21 + 3.1) * size.width * 0.32,
+                y: reflectedMotion(time * 0.09 + 2.0) * size.height * 0.29,
+                scale: 0.96 + 0.10 * CGFloat((sin(time * 0.51 + 1.2) + 1) / 2),
+                rotation: -4 + 13 * sin(time * 0.11)
+            )
+
             auroraRibbon(
                 colors: [
                     Color(red: 0.16, green: 0.92, blue: 0.72),
@@ -234,6 +276,37 @@ private struct AtlasLightfallBackground: View {
             )
         }
         .blendMode(.plusLighter)
+    }
+
+    private func auroraOrb(
+        colors: [Color],
+        width: CGFloat,
+        height: CGFloat,
+        x: CGFloat,
+        y: CGFloat,
+        scale: CGFloat,
+        rotation: Double
+    ) -> some View {
+        Ellipse()
+            .fill(
+                RadialGradient(
+                    colors: colors,
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: max(size.width * width, size.height * height) * 0.5
+                )
+            )
+            .frame(width: size.width * width, height: size.height * height)
+            .scaleEffect(scale)
+            .rotationEffect(.degrees(rotation))
+            .blur(radius: 72)
+            .offset(x: x, y: y)
+    }
+
+    private func reflectedMotion(_ value: Double) -> CGFloat {
+        let wrapped = value.truncatingRemainder(dividingBy: 4)
+        let phase = wrapped >= 0 ? wrapped : wrapped + 4
+        return CGFloat(phase < 2 ? phase - 1 : 3 - phase)
     }
 
     private func auroraRibbon(

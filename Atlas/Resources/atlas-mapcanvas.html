@@ -388,7 +388,8 @@ input[type=range]{accent-color:#f4f4f6}
 .card-copy blockquote{background:rgba(112,78,190,.16);color:#d5c4ff}
 .links-section>button{color:var(--ink)}
 .links-section>button:hover{background:rgba(255,255,255,.07)}
-.zoom-control{right:18px;bottom:18px}.legend{left:18px;bottom:18px}
+.zoom-control{right:92px;bottom:24px}.legend,.legend-reopen{left:240px;bottom:24px}.scale-bar{left:240px!important;bottom:24px!important}
+@media(max-width:760px){.legend,.legend-reopen,.scale-bar{left:18px!important;bottom:92px!important}.zoom-control{right:82px;bottom:24px}}
 .mode-notice{top:82px;color:#fff}
 .map-search-panel{
   position:fixed;right:24px;top:78px;z-index:110;width:min(360px,calc(100vw - 48px));
@@ -23052,7 +23053,7 @@ input[type=range]{accent-color:#f4f4f6}
           const ctx = canvas.getContext("2d"), c = camera.current;
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           ctx.clearRect(0, 0, rect.width, rect.height);
-          ctx.fillStyle = "#dfe4e2";
+          ctx.fillStyle = "#315f7a";
           ctx.fillRect(0, 0, rect.width, rect.height);
           ctx.save();
           ctx.translate(rect.width / 2, rect.height / 2);
@@ -23668,7 +23669,7 @@ input[type=range]{accent-color:#f4f4f6}
     return `rgb(${mix(16)},${mix(8)},${mix(0)})`;
   }
   function paintedTerrain(v) {
-    const stops = v <= 0 ? [[-0.35, "#315f7a"], [-0.18, "#4f86a0"], [-0.08, "#77aabd"], [0, "#a9d2d2"]] : [[0, "#78aa72"], [0.28, "#96bd72"], [0.48, "#d0b566"], [0.68, "#c78655"], [0.84, "#8d705f"], [1, "#f2f4f3"]];
+    const stops = v <= 0 ? [[-0.35, "#173b52"], [-0.18, "#245675"], [-0.08, "#315f7a"], [0, "#315f7a"]] : [[0, "#78aa72"], [0.28, "#96bd72"], [0.48, "#d0b566"], [0.68, "#c78655"], [0.84, "#8d705f"], [1, "#f2f4f3"]];
     for (let i = 1; i < stops.length; i++) if (v <= stops[i][0]) return blend(stops[i - 1][1], stops[i][1], clamp2((v - stops[i - 1][0]) / (stops[i][0] - stops[i - 1][0]), 0, 1));
     return stops[stops.length - 1][1];
   }
@@ -23704,13 +23705,13 @@ input[type=range]{accent-color:#f4f4f6}
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = savedMap ? "#bdcbc6" : "#e7e2d6";
+    ctx.fillStyle = "#315f7a";
     ctx.fillRect(0, 0, w, h);
     ctx.save();
     ctx.translate(w / 2, h / 2);
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-camera.x, -camera.y);
-    ctx.fillStyle = savedMap ? "#bdcbc6" : "#e7e2d6";
+    ctx.fillStyle = "#315f7a";
     ctx.fillRect(-5e3, -5e3, MAP_W + 1e4, MAP_H + 1e4);
     ctx.strokeStyle = "rgba(92,91,90,.075)";
     ctx.lineWidth = 1 / camera.zoom;
