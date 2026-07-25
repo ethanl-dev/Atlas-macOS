@@ -1177,9 +1177,9 @@ struct WorldBuilderCanvas: View {
         if canEdit {
             VStack(spacing: AtlasSpacing.s) {
                 // 研究 / 整理 / 批量新建都先给方案；对象快捷 chip 固定在输入框上方。
-                if commandMode == .organize {
+                if organizer.isThinking || organizer.plan != nil || organizer.errorText != nil {
                     organizePanel
-                } else if commandMode == .research {
+                } else if isResearchingInspiration || inspirationProposal != nil {
                     inspirationPanel
                 } else if !batchDrafts.isEmpty {
                     batchCreatePanel
@@ -1545,13 +1545,11 @@ struct WorldBuilderCanvas: View {
         }
     }
 
-    // 输入框上方的上下文 chip：未选中时是画布级能力；选中时是对象级能力。
+    // 输入框上方只保留被选中对象的上下文操作；画布级意图全部由自然语言判断。
     @ViewBuilder
     private var contextChipRow: some View {
         if let object = store.selected {
             quickActionRow(object)
-        } else {
-            canvasActionRow
         }
     }
 
@@ -1585,60 +1583,6 @@ struct WorldBuilderCanvas: View {
             Spacer(minLength: 0)
         }
         .frame(width: 620, alignment: .leading)
-    }
-
-    private var canvasActionRow: some View {
-        HStack(spacing: AtlasSpacing.s) {
-            HStack(spacing: 5) {
-                Image(systemName: "square.grid.2x2").font(.system(size: 11))
-                Text("画布").font(AtlasFont.caption)
-            }
-            .foregroundStyle(AtlasColor.textSecondary)
-            .padding(.horizontal, AtlasSpacing.s).padding(.vertical, 4)
-            .background(Color.white.opacity(0.06), in: Capsule())
-
-            Button {
-                commandMode = .place
-                commandText = "地点：\n角色：\n组织：\n事件："
-                commandFocused = true
-            } label: { commandChip("批量新建", number: 1) }
-            .buttonStyle(.plain)
-
-            Button {
-                commandMode = .place
-                commandFocused = true
-            } label: { commandChip("解析新建", number: 2) }
-            .buttonStyle(.plain)
-
-            Button {
-                commandMode = .organize
-                commandText = "按类型归类"
-                commandFocused = true
-            } label: { commandChip("整理画布", number: 3) }
-            .buttonStyle(.plain)
-
-            Button {
-                commandMode = .research
-                commandText = ""
-                commandFocused = true
-            } label: { commandChip("寻找灵感", number: 4) }
-            .buttonStyle(.plain)
-
-            Spacer(minLength: 0)
-        }
-        .frame(width: 620, alignment: .leading)
-    }
-
-    private func commandChip(_ title: String, number: Int) -> some View {
-        HStack(spacing: 4) {
-            Text(title).font(AtlasFont.caption)
-            Text("\(number)").font(AtlasFont.monoSmall)
-                .foregroundStyle(AtlasColor.textTertiary)
-        }
-        .foregroundStyle(AtlasColor.textPrimary)
-        .padding(.horizontal, AtlasSpacing.s).padding(.vertical, 5)
-        .background(AtlasP1Glass.darkFill, in: Capsule())
-        .overlay(Capsule().stroke(AtlasColor.borderSubtle))
     }
 
     private var batchCreatePanel: some View {
@@ -2144,7 +2088,7 @@ struct WorldBuilderCanvas: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.shield").font(.system(size: 11))
-                    Text("已核验的\(proposal.domain.title)灵感").font(AtlasFont.label)
+                    Text("Agent 递来的\(proposal.domain.title)参照").font(AtlasFont.label)
                     Spacer()
                     Text("\(String(format: "%.1f", proposal.duration))s").font(AtlasFont.monoSmall)
                         .foregroundStyle(AtlasColor.textTertiary)
@@ -2154,9 +2098,15 @@ struct WorldBuilderCanvas: View {
                 ForEach(proposal.cards) { card in
                     VStack(alignment: .leading, spacing: 3) {
                         Text(card.title).font(AtlasFont.caption).foregroundStyle(AtlasColor.textPrimary).lineLimit(1)
-                        Text(card.fact).font(AtlasFont.monoSmall).foregroundStyle(AtlasColor.textSecondary).lineLimit(2)
-                        Text(card.creativeAngle).font(AtlasFont.monoSmall).foregroundStyle(AtlasColor.textTertiary).lineLimit(2)
-                        Link(card.source.provider, destination: card.source.url)
+                        Text("资料参照：\(card.fact)")
+                            .font(AtlasFont.monoSmall)
+                            .foregroundStyle(AtlasColor.textSecondary)
+                            .lineLimit(3)
+                        Text("可继续追问：\(card.creativeAngle)")
+                            .font(AtlasFont.monoSmall)
+                            .foregroundStyle(AtlasColor.textTertiary)
+                            .lineLimit(3)
+                        Link("查看原始来源 · \(card.source.provider)", destination: card.source.url)
                             .font(AtlasFont.monoSmall)
                             .foregroundStyle(AtlasColor.auroraMint)
                     }
@@ -2165,7 +2115,7 @@ struct WorldBuilderCanvas: View {
 
                 HStack(spacing: AtlasSpacing.s) {
                     Button { adoptInspirationProposal() } label: {
-                        AtlasButtonLabel(title: "采纳为便签", systemImage: "checkmark")
+                        AtlasButtonLabel(title: "采纳为草稿便签", systemImage: "checkmark")
                     }
                     .buttonStyle(.atlas(.primary))
                     Button { dismissInspirationProposal() } label: {
@@ -2216,7 +2166,16 @@ struct WorldBuilderCanvas: View {
                 let id = store.add(.note, at: position)
                 if let objectIndex = store.objects.firstIndex(where: { $0.id == id }) {
                     store.objects[objectIndex].name = card.title
-                    store.objects[objectIndex].summary = "事实资料：\(card.fact)\n\n创作转译：\(card.creativeAngle)\n\n来源：\(card.source.provider)\n\(card.source.url.absoluteString)"
+                    store.objects[objectIndex].summary = """
+                    Agent 资料参照 · 尚未成为正式设定
+
+                    资料参照：\(card.fact)
+
+                    可继续追问：\(card.creativeAngle)
+
+                    原始来源：\(card.source.provider)
+                    \(card.source.url.absoluteString)
+                    """
                     store.objects[objectIndex].aiAssisted = true
                 }
             }

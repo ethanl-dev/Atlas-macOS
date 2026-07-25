@@ -16,12 +16,14 @@ struct AgentReply {
 
 enum DeepSeekError: LocalizedError {
     case notConfigured
+    case timedOut
     case http(Int, String)
     case badResponse
 
     var errorDescription: String? {
         switch self {
         case .notConfigured: return "尚未配置 DeepSeek API Key"
+        case .timedOut: return "整理请求超时，已停止等待。请稍后重试。"
         case .http(let code, let msg): return "DeepSeek 请求失败（\(code)）：\(msg)"
         case .badResponse: return "DeepSeek 返回无法解析"
         }
@@ -67,17 +69,19 @@ struct DeepSeekClient {
     """
 
     private static let inspirationSystemPrompt = """
-    你是 Atlas 世界创作平台的「真实灵感研究员」。你不是作者，也不把现实文化、历史或自然事实直接改写成设定。
+    你是 Atlas 世界创作平台的资料检索 Agent。你的角色是档案员与检索工具，不是作者。
 
     你只可根据用户提供的 sources 进行工作。每个灵感都必须绑定其中一个原始链接；资料不足时宁可少提或不提。事实与创作转译必须分开：fact 只写资料明示的内容，creative_angle 才能提出虚构世界的借鉴方向。
 
     对族群、地区习俗与宗教保持克制：避免概括、异化或将现实群体当作可挪用的素材。不要生成完整世界观、角色正文或图片。
 
-    Atlas 灵感便签的语气：
-    - 像编辑写给创作者的边注：准确、安静、具体，留出继续想象的空间。
-    - 标题不超过 18 个汉字，直接指出可被感知的现象或矛盾；不要论文标题，不要“浅水声学临界深度——”这类包装。
-    - fact 只保留一条最有启发性的事实，使用自然中文，不照抄摘要，不重复标题，不超过 70 个汉字。
-    - creative_angle 只给一个开放的观察角度，用“可以追问…”“值得留意…”一类克制表达；不替作者命名，不直接写成世界设定，不使用“设想一座…”等代写句式，不超过 60 个汉字。
+    Atlas Agent 的输出边界：
+    - 你只递「资料参照」和「可继续追问的问题」，供作者挑选；不替作者决定，不把建议写成既定设定。
+    - 所有面向作者的 title、fact、creative_angle 必须使用简体中文。英文论文标题、摘要和术语要转述成自然中文；确有必要时可在中文术语后保留英文专名。
+    - title 不超过 18 个汉字，直接指出资料中的现象或矛盾；不要照搬论文标题。
+    - fact 是「资料参照」：只保留一条资料明确支持、与本次问题直接相关的事实，不照抄摘要，不重复标题，不超过 70 个汉字。
+    - creative_angle 是「可继续追问」：写成一个开放问题，优先使用“如果……会怎样？”“可以追问：……”；不替作者命名，不直接写成世界设定，不超过 60 个汉字。
+    - 像档案员递来的一张边注：准确、安静、具体，留出作者判断的空间。
     - 不用 emoji，不用 Markdown，不用“事实资料 / 创作转译 / 灵感启示”等报告标签，不用感叹号。
     - 多张卡片必须各自选择不同的信息焦点；若事实或转译实质重复，只保留其中一张。
 
@@ -87,41 +91,25 @@ struct DeepSeekClient {
     func organize(instruction: String, snapshot: String) async throws -> AgentReply {
         guard AgentConfig.isConfigured else { throw DeepSeekError.notConfigured }
 
-        var messages: [[String: Any]] = [
+        let messages: [[String: Any]] = [
             ["role": "system", "content": Self.systemPrompt],
             ["role": "user", "content": "作者的整理请求：\(instruction)\n\n当前画布快照：\n\(snapshot)"]
         ]
 
-        var collected: [AgentAction] = []
-        var finalText = ""
-
-        for _ in 0..<4 {
-            let message = try await request(messages: messages)
-
-            let toolCalls = message["tool_calls"] as? [[String: Any]] ?? []
-            if toolCalls.isEmpty {
-                finalText = message["content"] as? String ?? ""
-                break
-            }
-
-            // 记录 assistant 的 tool_calls（协议要求回带），再为每个调用补一条 tool 结果。
-            messages.append(message)
-            for call in toolCalls {
-                let fn = call["function"] as? [String: Any] ?? [:]
-                let name = fn["name"] as? String ?? ""
-                let args = fn["arguments"] as? String ?? "{}"
-                if let action = AgentAction.from(name: name, argumentsJSON: args) {
-                    collected.append(action)
-                }
-                messages.append([
-                    "role": "tool",
-                    "tool_call_id": call["id"] as? String ?? "",
-                    "content": "已加入待采纳的整理方案。"
-                ])
-            }
+        // 整理结果完全由首轮 function calls 构成；不再为了获取一段补充文案
+        // 继续等待最多四轮网络请求。一次响应可以包含多个工具调用。
+        let message = try await request(messages: messages)
+        let toolCalls = message["tool_calls"] as? [[String: Any]] ?? []
+        let collected = toolCalls.compactMap { call -> AgentAction? in
+            let function = call["function"] as? [String: Any] ?? [:]
+            let name = function["name"] as? String ?? ""
+            let arguments = function["arguments"] as? String ?? "{}"
+            return AgentAction.from(name: name, argumentsJSON: arguments)
         }
-
-        return AgentReply(actions: collected, assistantText: finalText)
+        return AgentReply(
+            actions: collected,
+            assistantText: message["content"] as? String ?? ""
+        )
     }
 
     func parseCanvasIntent(instruction: String, snapshot: String) async throws -> CanvasIntentReply {
@@ -172,7 +160,14 @@ struct DeepSeekClient {
             ["role": "system", "content": Self.inspirationSystemPrompt],
             ["role": "user", "content": "作者正在寻找的方向：\(query)\n\n可用且已核验的资料：\n\(sourceText)"]
         ]
-        let message = try await request(messages: messages, tools: AgentToolSchema.inspirationTools())
+        let message = try await request(
+            messages: messages,
+            tools: AgentToolSchema.inspirationTools(),
+            toolChoice: [
+                "type": "function",
+                "function": ["name": "propose_inspirations"]
+            ]
+        )
         let calls = message["tool_calls"] as? [[String: Any]] ?? []
         guard let call = calls.first,
               let function = call["function"] as? [String: Any],
@@ -217,7 +212,9 @@ struct DeepSeekClient {
                 .components(separatedBy: .punctuationCharacters)
                 .joined()
                 .filter { !$0.isWhitespace }
-            guard !cleanTitle.isEmpty, !cleanFact.isEmpty, !cleanAngle.isEmpty,
+            guard Self.containsChinese(cleanTitle),
+                  Self.containsChinese(cleanFact),
+                  Self.containsChinese(cleanAngle),
                   seen.insert(fingerprint).inserted else { return nil }
             return InspirationCard(
                 title: cleanTitle,
@@ -225,6 +222,14 @@ struct DeepSeekClient {
                 creativeAngle: cleanAngle,
                 source: source
             )
+        }
+    }
+
+    static func containsChinese(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            (0x3400...0x4DBF).contains(scalar.value)
+                || (0x4E00...0x9FFF).contains(scalar.value)
+                || (0xF900...0xFAFF).contains(scalar.value)
         }
     }
 
@@ -243,24 +248,39 @@ struct DeepSeekClient {
     }
 
     /// 单轮请求，返回 choices[0].message 字典。
-    private func request(messages: [[String: Any]], tools: [[String: Any]] = AgentToolSchema.tools()) async throws -> [String: Any] {
+    private func request(
+        messages: [[String: Any]],
+        tools: [[String: Any]] = AgentToolSchema.tools(),
+        toolChoice: [String: Any]? = nil
+    ) async throws -> [String: Any] {
         let url = URL(string: "\(AgentConfig.baseURL)/chat/completions")!
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
+        req.timeoutInterval = 24
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(AgentConfig.apiKey)", forHTTPHeaderField: "Authorization")
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": AgentConfig.model,
             "messages": messages,
             "tools": tools,
-            "tool_choice": "auto",
             "temperature": 0.2,
             "stream": false
         ]
+        if let toolChoice {
+            body["tool_choice"] = toolChoice
+        } else {
+            body["tool_choice"] = "auto"
+        }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: req)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: req)
+        } catch let error as URLError where error.code == .timedOut {
+            throw DeepSeekError.timedOut
+        }
         guard let http = response as? HTTPURLResponse else { throw DeepSeekError.badResponse }
         guard (200..<300).contains(http.statusCode) else {
             let msg = String(data: data, encoding: .utf8) ?? ""

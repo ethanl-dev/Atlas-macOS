@@ -48,9 +48,17 @@ final class CanvasOrganizer: ObservableObject {
                 let actions: [AgentAction]
                 var note: String
                 if AgentConfig.isConfigured {
-                    let reply = try await DeepSeekClient().organize(instruction: text, snapshot: snap)
-                    actions = reply.actions
-                    note = reply.assistantText.isEmpty ? "DeepSeek 的整理方案" : reply.assistantText
+                    do {
+                        let reply = try await DeepSeekClient().organize(instruction: text, snapshot: snap)
+                        actions = reply.actions
+                        note = reply.assistantText.isEmpty
+                            ? "依据当前对象类型与关系生成。"
+                            : reply.assistantText
+                    } catch DeepSeekError.timedOut {
+                        // 常见布局与关系指令可以在本地继续完成，超时不应让用户空等后什么也看不到。
+                        actions = MockOrganizer.actions(for: text, store: store)
+                        note = "模型响应超时，已使用本地布局规则生成可预览方案。"
+                    }
                 } else {
                     actions = MockOrganizer.actions(for: text, store: store)
                     note = "本地演示 · 未配置 DeepSeek Key"

@@ -90,13 +90,13 @@ enum AgentToolSchema {
     static func inspirationTools() -> [[String: Any]] {
         [
             fn("propose_inspirations",
-               "根据已提供且可访问的真实资料，提出不超过 3 条可采纳的创作灵感。每条都必须引用 sources 中完全一致的 source_url。",
+               "根据已提供且可访问的真实资料，用简体中文递出不超过 3 条资料参照与开放问题。Agent 不是作者，不得把建议写成既定设定。每条必须引用 sources 中完全一致的 source_url。",
                ["type": "object",
                 "properties": [
                     "cards": ["type": "array", "items": ["type": "object", "properties": [
-                        "title": ["type": "string"],
-                        "fact": ["type": "string", "description": "仅概括给定资料中明确出现的事实，不得补造。"],
-                        "creative_angle": ["type": "string", "description": "将事实转译成创作启发，须明确是灵感而非真实设定。"],
+                        "title": ["type": "string", "description": "简体中文短标题，不照搬外文论文标题。"],
+                        "fact": ["type": "string", "description": "简体中文资料参照；仅概括给定资料中明确出现的事实，不得补造。"],
+                        "creative_angle": ["type": "string", "description": "简体中文开放问题；只递 what-if 或追问，不替作者写设定。"],
                         "source_url": ["type": "string", "description": "必须是 sources 中给出的原始链接之一。"]
                     ], "required": ["title", "fact", "creative_angle", "source_url"]]]
                 ], "required": ["cards"]])
