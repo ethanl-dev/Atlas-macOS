@@ -35,6 +35,7 @@ struct InspirationCard: Identifiable {
 
 struct InspirationResearchProposal {
     let domain: InspirationDomain
+    let searchQueries: [String]
     let cards: [InspirationCard]
     let duration: TimeInterval
 }
@@ -60,11 +61,12 @@ struct InspirationResearchService {
     func research(query: String) async throws -> InspirationResearchProposal {
         let startedAt = Date()
         let domain = Self.inferDomain(query)
+        let searchQueries = Self.plannedSearchQueries(for: query, domain: domain)
         let sources: [ResearchSource]
         if let sourceSearchOverride {
             sources = try await sourceSearchOverride(query, domain)
         } else {
-            sources = try await sourceSearch(query: query, domain: domain)
+            sources = try await sourceSearch(queries: searchQueries, domain: domain)
         }
         guard !sources.isEmpty else { throw InspirationResearchError.noSources }
 
@@ -79,28 +81,75 @@ struct InspirationResearchService {
         } else {
             cards = Self.localCards(from: sources)
         }
-        return InspirationResearchProposal(domain: domain, cards: cards, duration: Date().timeIntervalSince(startedAt))
+        return InspirationResearchProposal(
+            domain: domain,
+            searchQueries: searchQueries,
+            cards: cards,
+            duration: Date().timeIntervalSince(startedAt)
+        )
     }
 
     static func inferDomain(_ text: String) -> InspirationDomain {
         if contains(text, ["物种", "动物", "植物", "火山", "地震", "洪水", "飓风", "野火", "极光", "潮汐", "海洋", "气候", "自然", "生态"]) {
             return .nature
         }
-        if contains(text, ["历史", "朝代", "战争", "革命", "古代", "遗址", "档案", "手稿", "年代"]) { return .history }
+        if contains(text, ["历史", "朝代", "战争", "革命", "古代", "遗址", "档案", "手稿", "年代", "饥荒", "粮食危机", "粮荒"]) { return .history }
         if contains(text, ["习俗", "节庆", "仪式", "民俗", "文化", "地区", "族群", "社区"]) { return .culture }
         return .general
     }
 
-    private func sourceSearch(query: String, domain: InspirationDomain) async throws -> [ResearchSource] {
-        if domain == .nature,
-           let events = try? await eonetSources(query: query), !events.isEmpty {
-            return events
+    /// 把创作描述缩成资料源真正能理解的检索词。这里只做检索翻译，不产出任何事实。
+    static func plannedSearchQueries(for text: String, domain: InspirationDomain) -> [String] {
+        let mappings: [(String, [String])]
+        switch domain {
+        case .nature:
+            mappings = [
+                ("潮汐", ["tidal acoustics sound propagation", "tidal bore natural phenomenon"]),
+                ("退潮", ["tidal acoustics sound propagation", "tidal bore natural phenomenon"]),
+                ("火山闪电", ["volcanic lightning"]),
+                ("火山", ["volcanic natural phenomena"]),
+                ("极光", ["aurora natural phenomenon"])
+            ]
+        case .history:
+            mappings = [
+                ("粮食危机", ["historical famine food crisis"]),
+                ("粮荒", ["historical famine food crisis"]),
+                ("饥荒", ["historical famine"])
+            ]
+        case .culture:
+            mappings = [
+                ("习俗", ["ethnographic study customary practice"]),
+                ("仪式", ["ethnographic study ritual practice"])
+            ]
+        case .general:
+            mappings = []
         }
-        if let academicSources = try? await openAlexSources(query: query, domain: domain), !academicSources.isEmpty {
-            return academicSources
+        let specific = mappings.first(where: { text.contains($0.0) })?.1 ?? []
+        let fallback: String
+        switch domain {
+        case .nature: fallback = "natural phenomenon scientific study"
+        case .history: fallback = "historical event archival study"
+        case .culture: fallback = "ethnographic primary source collection"
+        case .general: fallback = text
         }
-        if let archiveSources = try? await libraryOfCongressSources(query: query, domain: domain), !archiveSources.isEmpty {
-            return archiveSources
+        return Array(NSOrderedSet(array: specific + [fallback])).compactMap { $0 as? String }.prefix(2).map { $0 }
+    }
+
+    private func sourceSearch(queries: [String], domain: InspirationDomain) async throws -> [ResearchSource] {
+        for query in queries {
+            if domain == .nature,
+               let events = try? await eonetSources(query: query), !events.isEmpty {
+                return events
+            }
+            if let academicSources = try? await openAlexSources(query: query, domain: domain), !academicSources.isEmpty {
+                return academicSources
+            }
+            if let crossrefSources = try? await crossrefSources(query: query, domain: domain), !crossrefSources.isEmpty {
+                return crossrefSources
+            }
+            if let archiveSources = try? await libraryOfCongressSources(query: query, domain: domain), !archiveSources.isEmpty {
+                return archiveSources
+            }
         }
         throw InspirationResearchError.noSources
     }
@@ -154,6 +203,35 @@ struct InspirationResearchService {
         }
     }
 
+    /// Crossref 提供 DOI 元数据，链接直接回到出版物记录；它是 OpenAlex 失效时的独立学术检索兜底。
+    private func crossrefSources(query: String, domain: InspirationDomain) async throws -> [ResearchSource] {
+        var components = URLComponents(string: "https://api.crossref.org/works")!
+        components.queryItems = [
+            URLQueryItem(name: "query.bibliographic", value: query),
+            URLQueryItem(name: "rows", value: "5")
+        ]
+        let (data, response) = try await fetch(components.url!)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return [] }
+        let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        let message = payload["message"] as? [String: Any] ?? [:]
+        let items = message["items"] as? [[String: Any]] ?? []
+        return items.compactMap { item in
+            guard let doi = item["DOI"] as? String,
+                  let url = URL(string: "https://doi.org/\(doi)"),
+                  let title = (item["title"] as? [String])?.first,
+                  !title.isEmpty else { return nil }
+            let venue = (item["container-title"] as? [String])?.first ?? "学术出版记录"
+            let abstract = (item["abstract"] as? String).map(Self.cleanHTML)
+            return ResearchSource(
+                provider: "Crossref · \(venue)",
+                title: title,
+                excerpt: abstract?.isEmpty == false ? abstract! : "可通过 DOI 回到出版物或原始文献记录。",
+                url: url,
+                domain: domain
+            )
+        }
+    }
+
     private func eonetSources(query: String) async throws -> [ResearchSource] {
         var components = URLComponents(string: "https://eonet.gsfc.nasa.gov/api/v3/events")!
         components.queryItems = [URLQueryItem(name: "status", value: "all"), URLQueryItem(name: "limit", value: "50")]
@@ -178,7 +256,7 @@ struct InspirationResearchService {
             InspirationCard(
                 title: source.title,
                 fact: source.excerpt,
-                creativeAngle: "可借鉴它的节律、边界或组织方式；在世界中另行命名与重构，不把资料本身当作设定。",
+                creativeAngle: "值得留意其中的节律与边界如何变化，再决定它能为创作打开哪一个问题。",
                 source: source
             )
         }
@@ -199,6 +277,10 @@ struct InspirationResearchService {
             .map(\.1)
         guard !words.isEmpty else { return nil }
         return words.joined(separator: " ")
+    }
+
+    private static func cleanHTML(_ text: String) -> String {
+        text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
     }
 
     private static func contains(_ text: String, _ words: [String]) -> Bool { words.contains { text.contains($0) } }

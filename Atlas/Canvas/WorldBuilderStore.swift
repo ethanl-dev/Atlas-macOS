@@ -105,6 +105,9 @@ struct BuilderObject: Identifiable {
     var kind: BuilderKind
     var name: String
     var summary: String
+    /// 类型专属字段。key 使用产品字段名，value 保持轻量文本表示；
+    /// 画布卡片和详情面板按 kind 解释同一份数据。
+    var fields: [String: String] = [:]
     var position: CGPoint      // 画布世界坐标（卡片中心）
     var size: CGSize           // 卡片尺寸（世界坐标，可拉角改变）
     var aiAssisted: Bool = false
@@ -250,9 +253,19 @@ final class WorldBuilderStore: ObservableObject {
                       position: CGPoint(x: 470, y: 330), size: BuilderKind.map.defaultSize),
                 .init(id: "loc-seed", kind: .location, name: "雾港",
                       summary: "声音会在退潮时被海水带走。",
+                      fields: [
+                        "位置": "潮汐带北岸",
+                        "感官速写": "盐雾贴着铜制栈桥，远处只剩低沉鲸歌",
+                        "在这里会发生什么": "退潮前交换一段被海水带走的记忆"
+                      ],
                       position: CGPoint(x: 780, y: 250), size: BuilderKind.location.defaultSize),
                 .init(id: "chr-seed", kind: .character, name: "守望者·岑",
                       summary: "白塔档案室的守夜人。",
+                      fields: [
+                        "立场": "0.34",
+                        "代表台词": "灯熄灭以前，名字就还没有消失。",
+                        "真实身份": "最后一位听得见鲸歌的人"
+                      ],
                       position: CGPoint(x: 800, y: 470), size: BuilderKind.character.defaultSize)
             ]
             self.mapMade = true
@@ -288,9 +301,14 @@ final class WorldBuilderStore: ObservableObject {
     func add(_ kind: BuilderKind, at position: CGPoint) -> String {
         counter += 1
         let id = "\(kind.rawValue)-\(counter)-\(Int(Date().timeIntervalSince1970))"
+        let resolvedPosition = nonOverlappingPosition(
+            for: kind.defaultSize,
+            around: position
+        )
         var object = BuilderObject(
             id: id, kind: kind, name: "",
-            summary: "", position: position, size: kind.defaultSize
+            summary: "", fields: Self.initialFields(for: kind),
+            position: resolvedPosition, size: kind.defaultSize
         )
         // 事件天生带时间元素：默认落在「发展」阶段，作者可在详情卡改。
         if kind == .event { object.time = EventTime(phase: .rising) }
@@ -299,6 +317,78 @@ final class WorldBuilderStore: ObservableObject {
         selectedID = id
         saved = false
         return id
+    }
+
+    /// Returns the closest free placement around the requested point.
+    /// New cards use the same resolver before animation and insertion, so the
+    /// visual target, the progress overlay and the final card never diverge.
+    func nonOverlappingPosition(
+        for size: CGSize,
+        around preferred: CGPoint,
+        spacing: CGFloat = 28
+    ) -> CGPoint {
+        let occupied = objects.map { object in
+            CGRect(
+                x: object.position.x - object.size.width / 2 - spacing,
+                y: object.position.y - object.size.height / 2 - spacing,
+                width: object.size.width + spacing * 2,
+                height: object.size.height + spacing * 2
+            )
+        }
+
+        func isFree(_ point: CGPoint) -> Bool {
+            let candidate = CGRect(
+                x: point.x - size.width / 2,
+                y: point.y - size.height / 2,
+                width: size.width,
+                height: size.height
+            )
+            return !occupied.contains { $0.intersects(candidate) }
+        }
+
+        if isFree(preferred) { return preferred }
+
+        let stepX = max(size.width + spacing, 190)
+        let stepY = max(size.height + spacing, 132)
+        for ring in 1...24 {
+            for x in -ring...ring {
+                for y in -ring...ring where abs(x) == ring || abs(y) == ring {
+                    let candidate = CGPoint(
+                        x: preferred.x + CGFloat(x) * stepX,
+                        y: preferred.y + CGFloat(y) * stepY
+                    )
+                    if isFree(candidate) { return candidate }
+                }
+            }
+        }
+
+        return CGPoint(
+            x: preferred.x + CGFloat(objects.count + 1) * stepX,
+            y: preferred.y
+        )
+    }
+
+    /// 新卡片一落到画布上就带有该类型的结构信号。
+    /// 空字符串让字段保持可编辑，同时不把占位文案误存成用户内容。
+    private static func initialFields(for kind: BuilderKind) -> [String: String] {
+        switch kind {
+        case .location:
+            return ["位置": "", "感官速写": "", "在这里会发生什么": "", "隐藏入口": ""]
+        case .character:
+            return ["立场": "0.5", "代表台词": "", "真实身份": ""]
+        case .org:
+            return ["阶层结构": "", "理念": "", "内幕": ""]
+        case .event:
+            return ["触发条件": "", "立场选择 A": "", "立场选择 B": "", "结局分叉": ""]
+        case .rule:
+            return ["能做什么": "", "不能做什么": "", "代价": "", "检定机制": ""]
+        case .item:
+            return ["属性": "", "谜题碎片": ""]
+        case .work:
+            return ["创作内容": "", "作者": ""]
+        case .map, .note:
+            return [:]
+        }
     }
 
     func move(_ id: String, to position: CGPoint) {

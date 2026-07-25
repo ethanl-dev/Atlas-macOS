@@ -39,6 +39,7 @@ struct DeepSeekClient {
     3. 你不"生成设定"，只"整理已存在的东西"。若作者的话涉及角色关系（如"把艾琳娜和森林议会连起来"），用 link_objects 提议关系并给出简短类别。
     4. 一次尽量用最少的工具调用达成目标。整理整块画布优先用 arrange_canvas。
     5. 所有动作都是"提议"，最终由作者采纳。不要啰嗦解释，直接调用工具。
+    6. assistantText 只写简洁、克制的中文说明：不用 emoji，不用 Markdown 标题，不用加粗符号，不复述工具清单，不使用“已为你”“以下是”“方案已提交”等汇报腔。最多 3 句。
 
     画布快照里给了每个对象的 id、类型、名称，以及关系的 id。引用对象/关系时必须用这些 id。
     """
@@ -49,10 +50,13 @@ struct DeepSeekClient {
     你必须使用给定工具 propose_cards，不要直接用自然语言回答。
 
     可用技能：
-    1. 批量新建：从列表、段落、企划设定里提取地点/角色/组织/事件/规则/物件/作品/便签。
+    1. 批量新建：从列表、段落、企划设定里提取地点/角色/组织/事件/规则/物件/作品/便签。只为明确存在的世界对象建卡。
     2. 命名解析：用户说「命名为 X / 叫 X / 名称为 X」时，name 必须只填 X。
     3. 类型识别：用户明确说地点/角色/组织/事件/规则等类型时，必须尊重明确类型。
     4. 摘要整理：只有当用户给了说明时，才把说明放进 summary；不要替作者扩写设定。
+    5. 不要把任务说明、列表标题、命令句或描述句当作对象名称。例如「根据下面设定创建画布卡片」永远不是卡片；「它建在会发光的盐沼上」「每次退潮后居民失声」是「雾港」的 summary，不是新的地点。
+    6. 单对象保护：若用户只说「新建一个地点，命名为雾港；它建在会发光的盐沼上；每次退潮后居民失声」，cards 必须只有 1 张：{kind: location, name: 雾港, summary: 它建在会发光的盐沼上；每次退潮后居民失声}。只有明确列出多个命名对象、多个类型前缀或多条对象条目时才拆卡。
+    7. 调用工具前在内部逐项自检：每个 name 是否是可独立指认的世界对象？如果不是，合并到最近一个对象的 summary 或忽略。
 
     边界：
     - 只提出草稿，不创建正式设定。
@@ -68,6 +72,15 @@ struct DeepSeekClient {
     你只可根据用户提供的 sources 进行工作。每个灵感都必须绑定其中一个原始链接；资料不足时宁可少提或不提。事实与创作转译必须分开：fact 只写资料明示的内容，creative_angle 才能提出虚构世界的借鉴方向。
 
     对族群、地区习俗与宗教保持克制：避免概括、异化或将现实群体当作可挪用的素材。不要生成完整世界观、角色正文或图片。
+
+    Atlas 灵感便签的语气：
+    - 像编辑写给创作者的边注：准确、安静、具体，留出继续想象的空间。
+    - 标题不超过 18 个汉字，直接指出可被感知的现象或矛盾；不要论文标题，不要“浅水声学临界深度——”这类包装。
+    - fact 只保留一条最有启发性的事实，使用自然中文，不照抄摘要，不重复标题，不超过 70 个汉字。
+    - creative_angle 只给一个开放的观察角度，用“可以追问…”“值得留意…”一类克制表达；不替作者命名，不直接写成世界设定，不使用“设想一座…”等代写句式，不超过 60 个汉字。
+    - 不用 emoji，不用 Markdown，不用“事实资料 / 创作转译 / 灵感启示”等报告标签，不用感叹号。
+    - 多张卡片必须各自选择不同的信息焦点；若事实或转译实质重复，只保留其中一张。
+
     必须调用 propose_inspirations，不要直接用自然语言回答。
     """
 
@@ -189,14 +202,44 @@ struct DeepSeekClient {
         let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         let cards = object["cards"] as? [[String: Any]] ?? []
         let sourcesByURL = Dictionary(uniqueKeysWithValues: sources.map { ($0.url.absoluteString, $0) })
+        var seen = Set<String>()
         return cards.compactMap { card in
             guard let title = card["title"] as? String,
                   let fact = card["fact"] as? String,
                   let angle = card["creative_angle"] as? String,
                   let sourceURL = card["source_url"] as? String,
                   let source = sourcesByURL[sourceURL] else { return nil }
-            return InspirationCard(title: title, fact: fact, creativeAngle: angle, source: source)
+            let cleanTitle = Self.cleanModelText(title, limit: 36)
+            let cleanFact = Self.cleanModelText(fact, limit: 140)
+            let cleanAngle = Self.cleanModelText(angle, limit: 120)
+            let fingerprint = "\(cleanTitle)|\(cleanFact)"
+                .lowercased()
+                .components(separatedBy: .punctuationCharacters)
+                .joined()
+                .filter { !$0.isWhitespace }
+            guard !cleanTitle.isEmpty, !cleanFact.isEmpty, !cleanAngle.isEmpty,
+                  seen.insert(fingerprint).inserted else { return nil }
+            return InspirationCard(
+                title: cleanTitle,
+                fact: cleanFact,
+                creativeAngle: cleanAngle,
+                source: source
+            )
         }
+    }
+
+    private static func cleanModelText(_ text: String, limit: Int) -> String {
+        let withoutEmoji = text.filter { character in
+            !character.unicodeScalars.contains {
+                $0.properties.isEmojiPresentation || $0.value == 0xFE0F
+            }
+        }
+        let withoutMarkdown = withoutEmoji
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "__", with: "")
+            .replacingOccurrences(of: "#", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(withoutMarkdown.prefix(limit))
     }
 
     /// 单轮请求，返回 choices[0].message 字典。

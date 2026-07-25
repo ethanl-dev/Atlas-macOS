@@ -60,6 +60,21 @@ final class AgentBenchmarkTests: XCTestCase {
         XCTAssertEqual(InspirationResearchService.inferDomain("神秘港口").rawValue, InspirationDomain.general.rawValue)
     }
 
+    func testResearchPlannerTurnsCreativePromptsIntoShortSourceQueries() {
+        let nature = InspirationResearchService.plannedSearchQueries(
+            for: "找一个自然现象，为雾港退潮后失声提供灵感，并附来源。",
+            domain: .nature
+        )
+        let history = InspirationResearchService.plannedSearchQueries(
+            for: "找一件历史上的粮食危机，为潮汐修会提供权力冲突灵感。",
+            domain: .history
+        )
+        XCTAssertEqual(nature.first, "tidal acoustics sound propagation")
+        XCTAssertEqual(history.first, "historical famine food crisis")
+        XCTAssertTrue(nature.allSatisfy { !$0.contains("雾港") })
+        XCTAssertTrue(history.allSatisfy { !$0.contains("潮汐修会") })
+    }
+
     func testResearchFallbackKeepsVerifiedSourceAttached() async throws {
         let service = InspirationResearchService(sourceSearch: { _, _ in [self.verifiedSource] }, useModel: false)
         let proposal = try await service.research(query: "一场历史上的粮食危机")
@@ -171,6 +186,21 @@ final class AgentBenchmarkTests: XCTestCase {
         XCTAssertEqual(creation.drafts.count, 1)
         XCTAssertEqual(creation.drafts[0].kind.rawValue, "location")
         XCTAssertEqual(creation.drafts[0].name, "雾港")
+
+        let singleObject = try await client.parseCanvasIntent(
+            instruction: "新建一个地点，命名为\"雾港\"；它建在会发光的盐沼上；每次退潮后，居民都会暂时失去声音。",
+            snapshot: "对象：\n（空）\n关系：\n（无）"
+        )
+        XCTAssertEqual(singleObject.drafts.count, 1)
+        XCTAssertEqual(singleObject.drafts.first?.name, "雾港")
+        XCTAssertTrue(singleObject.drafts.first?.summary.contains("盐沼") == true)
+
+        let batch = try await client.parseCanvasIntent(
+            instruction: "根据下面设定创建画布卡片：\n- 雾港：地点，退潮后全城失声\n- 潮汐修会：组织，垄断盐沼航道\n- 伊莱：角色，修会记录员\n- 无声潮：事件，每年一次的异常退潮",
+            snapshot: "对象：\n（空）\n关系：\n（无）"
+        )
+        XCTAssertEqual(batch.drafts.count, 4)
+        XCTAssertEqual(Set(batch.drafts.map(\.name)), Set(["雾港", "潮汐修会", "伊莱", "无声潮"]))
 
         let store = WorldBuilderStore(seeded: true)
         let organization = try await client.organize(instruction: "按类型归类", snapshot: CanvasOrganizer.snapshot(store))

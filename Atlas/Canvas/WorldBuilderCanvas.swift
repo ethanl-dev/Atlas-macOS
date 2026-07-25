@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 //
 //  WorldBuilderCanvas —— 创建 / 管理世界的画布（原生 SwiftUI）。
@@ -15,6 +16,7 @@ import AppKit
 struct WorldBuilderCanvas: View {
     @ObservedObject var model: AtlasAppModel
     @StateObject private var store: WorldBuilderStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let canEdit: Bool
     var onExit: () -> Void
 
@@ -26,6 +28,11 @@ struct WorldBuilderCanvas: View {
     @State private var showMapEditor = false
     @State private var placeCount = 0
     @State private var commandText = ""
+    @State private var showCommandFileImporter = false
+    @State private var importedCommandFileName: String?
+    @State private var selectedFixedSkill: FixedCanvasSkill?
+    @State private var showCanvasImagePicker = false
+    @State private var attachedCanvasImageIDs: [String] = []
     @FocusState private var commandFocused: Bool
     @State private var lastHoverCanvas: CGPoint = .zero
     @State private var marqueeStart: CGPoint?
@@ -39,6 +46,11 @@ struct WorldBuilderCanvas: View {
     @State private var inspirationProposal: InspirationResearchProposal?
     @State private var sessionExpanded = true
     @State private var assistantCardExpanded = true
+    @State private var organizeDetailsExpanded = false
+    @State private var thinkingGlowExpanded = false
+    @State private var thinkingBorderRotation = 0.0
+    @State private var agentBuildCursor: AgentBuildCursor?
+    @State private var isAgentBuilding = false
     @State private var sessionEntries: [AgentSessionEntry] = [
         .init(kind: .system, title: "智能体日志", body: "这里会记录你的指令、解析结果和采纳动作。")
     ]
@@ -49,6 +61,34 @@ struct WorldBuilderCanvas: View {
     @StateObject private var organizer = CanvasOrganizer()
     @State private var commandMode: CommandMode = .place
     private enum CommandMode { case place, research, organize }
+    private enum FixedCanvasSkill: String, CaseIterable, Identifiable {
+        case cardBuilder
+        case sourceResearch
+        case relationshipOrganizer
+
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .cardBuilder: return "结构化建档"
+            case .sourceResearch: return "真实资料灵感"
+            case .relationshipOrganizer: return "关系与布局整理"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .cardBuilder: return "rectangle.stack.badge.plus"
+            case .sourceResearch: return "doc.text.magnifyingglass"
+            case .relationshipOrganizer: return "point.3.connected.trianglepath.dotted"
+            }
+        }
+        var mode: CommandMode {
+            switch self {
+            case .cardBuilder: return .place
+            case .sourceResearch: return .research
+            case .relationshipOrganizer: return .organize
+            }
+        }
+    }
     private struct BatchCreateDraft: Identifiable {
         let id = UUID()
         var kind: BuilderKind
@@ -89,6 +129,22 @@ struct WorldBuilderCanvas: View {
         var createdAt = Date()
     }
 
+    private struct AgentBuildCursor {
+        var position: CGPoint
+        var label: String
+        var targetCenter: CGPoint?
+        var targetSize: CGSize?
+        var progress: Double
+    }
+
+    private struct CanvasImageAttachment: Identifiable {
+        var id: String { objectID }
+        var objectID: String
+        var title: String
+        var source: String
+        var kind: BuilderKind
+    }
+
     init(
         model: AtlasAppModel,
         mode: String = "create",
@@ -111,6 +167,12 @@ struct WorldBuilderCanvas: View {
         .overlay { worldNameEditorOverlay.zIndex(90) }
         .overlay { mapEditorOverlay }
         .background(Color(red: 0.035, green: 0.035, blue: 0.043))
+        .fileImporter(
+            isPresented: $showCommandFileImporter,
+            allowedContentTypes: commandFileTypes
+        ) { result in
+            handleCommandFileImport(result)
+        }
     }
 
     // MARK: - 画布舞台
@@ -141,7 +203,7 @@ struct WorldBuilderCanvas: View {
                 ForEach(store.objects) { object in
                     let onTimeline = store.projection == .timeline
                     let dimmed = onTimeline && object.kind != .event
-                    let world = (onTimeline ? timeline.positions[object.id] : nil) ?? object.position
+                    let world = (onTimeline ? timeline.positions[object.id] : nil) ?? organizePreviewPosition(for: object)
                     ObjectCard(
                         object: object,
                         scale: scale,
@@ -157,13 +219,13 @@ struct WorldBuilderCanvas: View {
                     .position(worldToScreen(world))
                     .opacity(dimmed ? 0.12 : 1)
                     .allowsHitTesting(!dimmed)
-                    .animation(.spring(response: 0.45, dampingFraction: 0.82), value: onTimeline)
+                    .animation(.spring(response: 0.55, dampingFraction: 0.84), value: onTimeline)
+                    .animation(.spring(response: 0.58, dampingFraction: 0.82), value: organizeDetailsExpanded)
                     .transition(.scale(scale: 0.92).combined(with: .opacity))
                 }
 
-                if let plan = organizer.plan {
-                    organizeGhostLayer(plan)
-                }
+                organizePreviewLinkLayer
+                agentBuildOverlay
 
                 if let rect = marqueeScreenRect {
                     Rectangle()
@@ -212,85 +274,271 @@ struct WorldBuilderCanvas: View {
         }
     }
 
-    // 关系连线：粗细/亮度随强度；提议中的关系用虚线；选中的关系提亮。
+    // 关系连线：拟物「悬挂缆绳」。缆绳从卡片边缘接出，在重力方向自然下垂（悬链线）；
+    // 强度 → 线宽/亮度；提议中的关系用虚线；选中提亮。同一对卡片的多条关系呈扇形错开，避免重叠。
     private func relationLayer(in size: CGSize) -> some View {
         Canvas { context, _ in
-            for relation in store.relations {
-                guard let a = store.objects.first(where: { $0.id == relation.sourceID }),
-                      let b = store.objects.first(where: { $0.id == relation.targetID }) else { continue }
-                let selected = store.selectedRelationID == relation.id
-                var path = Path()
-                path.move(to: worldToScreen(a.position))
-                path.addLine(to: worldToScreen(b.position))
-                let op = selected ? 0.9 : relation.strength.opacity
-                let width = (selected ? relation.strength.lineWidth + 0.8 : relation.strength.lineWidth)
-                let style: StrokeStyle = relation.proposed
-                    ? .init(lineWidth: relation.strength.lineWidth, dash: [6, 5])
-                    : .init(lineWidth: width, lineCap: .round)
-                context.stroke(path, with: .color(.white.opacity(op)), style: style)
+            for item in cableItems() {
+                let r = item.relation
+                let path = item.geometry.path
+                let op = item.selected ? 0.92 : r.strength.opacity
+                let w = item.selected ? r.strength.lineWidth + 0.8 : r.strength.lineWidth
+
+                if r.proposed {
+                    context.stroke(path, with: .color(.white.opacity(max(op, 0.4))),
+                                   style: .init(lineWidth: r.strength.lineWidth, lineCap: .round, dash: [6, 5]))
+                } else {
+                    // 外发光 → 缆身 → 高光芯，模拟有体积的圆缆绳
+                    context.stroke(path, with: .color(.white.opacity(op * 0.14)),
+                                   style: .init(lineWidth: w + 3, lineCap: .round))
+                    context.stroke(path, with: .color(.white.opacity(op)),
+                                   style: .init(lineWidth: w, lineCap: .round))
+                    context.stroke(path, with: .color(.white.opacity(min(op * 0.9 + 0.12, 1))),
+                                   style: .init(lineWidth: max(w * 0.4, 0.6), lineCap: .round))
+                }
+
+                // 两端「接口」小铆点，坐实缆绳插在卡片上
+                for pt in [item.geometry.p0, item.geometry.p1] {
+                    let nub = max(w * 0.85, 1.8)
+                    context.fill(Path(ellipseIn: CGRect(x: pt.x - nub, y: pt.y - nub,
+                                                        width: nub * 2, height: nub * 2)),
+                                 with: .color(.white.opacity(min(op + 0.14, 0.8))))
+                }
             }
         }
         .allowsHitTesting(false)
     }
 
-    // 关系中点 chip：可点选进入关系详情卡。有长文叙事的关系带段落图标。
+    // 关系 chip：挂在各自缆绳的最低点（下垂点）。多条关系的最低点天然错开，chip 不再叠在一起。
     @ViewBuilder
     private func relationChips(in size: CGSize) -> some View {
-        ForEach(store.relations) { relation in
-            if let a = store.objects.first(where: { $0.id == relation.sourceID }),
-               let b = store.objects.first(where: { $0.id == relation.targetID }) {
-                let mid = CGPoint(x: (a.position.x + b.position.x) / 2,
-                                  y: (a.position.y + b.position.y) / 2)
-                RelationChip(relation: relation,
-                             selected: store.selectedRelationID == relation.id) {
-                    selectRelation(relation.id)
-                }
-                .position(worldToScreen(mid))
+        ForEach(cableItems(), id: \.relation.id) { item in
+            RelationChip(relation: item.relation, selected: item.selected) {
+                selectRelation(item.relation.id)
             }
+            .position(item.geometry.bottom)
         }
     }
 
-    // Agent 整理方案的幽灵预览：提议新位置的半透明卡 + 移动轨迹 + 提议关系（虚线）。
+    // MARK: - 缆绳几何
+
+    private struct CableGeometry {
+        var p0: CGPoint      // 卡片 A 边缘接点（屏幕坐标）
+        var p1: CGPoint      // 卡片 B 边缘接点
+        var bottom: CGPoint  // 缆绳最低点（chip 悬挂处）
+        var path: Path
+    }
+
+    private struct CableItem {
+        var relation: BuilderRelation
+        var selected: Bool
+        var geometry: CableGeometry
+    }
+
+    /// 无序对 key，用于把同一对卡片之间的多条关系聚在一起做扇形错开。
+    private func pairKey(_ a: String, _ b: String) -> String {
+        a < b ? a + "|" + b : b + "|" + a
+    }
+
+    /// 组装所有关系的缆绳几何：先按卡片对分组编号，再逐条算下垂曲线。
+    private func cableItems() -> [CableItem] {
+        var total: [String: Int] = [:]
+        var index: [String: Int] = [:]
+        for r in store.relations {
+            let k = pairKey(r.sourceID, r.targetID)
+            let i = total[k, default: 0]
+            index[r.id] = i
+            total[k] = i + 1
+        }
+
+        let rects = cardRectsScreen()   // chip 需要避开的所有卡片矩形（屏幕坐标）
+
+        var items: [CableItem] = []
+        for r in store.relations {
+            guard let a = store.objects.first(where: { $0.id == r.sourceID }),
+                  let b = store.objects.first(where: { $0.id == r.targetID }) else { continue }
+            let k = pairKey(r.sourceID, r.targetID)
+            let geo = cableGeometry(a: a, b: b,
+                                    index: index[r.id] ?? 0,
+                                    total: total[k] ?? 1,
+                                    avoiding: rects)
+            items.append(.init(relation: r,
+                               selected: store.selectedRelationID == r.id,
+                               geometry: geo))
+        }
+        return items
+    }
+
+    /// 单条缆绳：卡片边缘接点 + 重力下垂的二次贝塞尔；同对多条按序错开扇形。
+    private func cableGeometry(a: BuilderObject, b: BuilderObject, index: Int, total: Int, avoiding rects: [CGRect]) -> CableGeometry {
+        let aPosition = organizePreviewPosition(for: a)
+        let bPosition = organizePreviewPosition(for: b)
+        let anchorA = edgeAnchor(center: aPosition, size: a.size, toward: bPosition)
+        let anchorB = edgeAnchor(center: bPosition, size: b.size, toward: aPosition)
+        let p0 = worldToScreen(anchorA)
+        let p1 = worldToScreen(anchorB)
+
+        let dx = p1.x - p0.x, dy = p1.y - p0.y
+        let len = max(hypot(dx, dy), 1)
+        let nx = -dy / len                       // 单位法线（用于侧向轻微弓起 + 扇形铺开）
+        let mid = CGPoint(x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2)
+
+        // 扇形偏移：同对第 index 条相对中心的错位量（… -1,0,1 …）
+        let spread = total > 1 ? CGFloat(index) - CGFloat(total - 1) / 2 : 0
+        // 下垂量随跨度增长并夹在合理区间；每条依次垂得更低，形成层叠缆绳。
+        let drop = min(max(len * 0.15, 26 * scale), 150 * scale)
+                 + CGFloat(index) * 24 * scale
+        // 控制点：竖直方向 2*drop（二次贝塞尔中点挠度 = drop）+ 轻微侧向弓起与扇形位移。
+        let lateral = nx * (drop * 0.2 + spread * 34 * scale)
+        let control = CGPoint(x: mid.x + lateral, y: mid.y + 2 * drop)
+
+        var path = Path()
+        path.move(to: p0)
+        path.addQuadCurve(to: p1, control: control)
+
+        return CableGeometry(p0: p0, p1: p1,
+                             bottom: chipAnchor(p0: p0, control: control, p1: p1, avoiding: rects),
+                             path: path)
+    }
+
+    /// 从卡片中心沿指向对方的方向，求与卡片矩形边框的交点（缆绳接口）。
+    private func edgeAnchor(center: CGPoint, size: CGSize, toward other: CGPoint) -> CGPoint {
+        let dx = other.x - center.x, dy = other.y - center.y
+        if dx == 0 && dy == 0 { return center }
+        let sx = dx == 0 ? CGFloat.infinity : (size.width / 2) / abs(dx)
+        let sy = dy == 0 ? CGFloat.infinity : (size.height / 2) / abs(dy)
+        let s = min(sx, sy)
+        return CGPoint(x: center.x + dx * s, y: center.y + dy * s)
+    }
+
+    /// 所有卡片的屏幕矩形（含整理预览位移），chip 需避开它们。
+    private func cardRectsScreen() -> [CGRect] {
+        store.objects.map { o in
+            let c = worldToScreen(organizePreviewPosition(for: o))
+            let w = o.size.width * scale, h = o.size.height * scale
+            return CGRect(x: c.x - w / 2, y: c.y - h / 2, width: w, height: h)
+        }
+    }
+
+    /// 点到一组矩形的最短净空（在矩形内为 0）。
+    private func clearance(of p: CGPoint, from rects: [CGRect]) -> CGFloat {
+        guard !rects.isEmpty else { return .greatestFiniteMagnitude }
+        var best = CGFloat.greatestFiniteMagnitude
+        for r in rects {
+            if r.contains(p) { return 0 }
+            let dx = max(r.minX - p.x, p.x - r.maxX, 0)
+            let dy = max(r.minY - p.y, p.y - r.maxY, 0)
+            best = min(best, hypot(dx, dy))
+        }
+        return best
+    }
+
+    /// chip 挂点：限制在缆绳中段（避开两端卡片边缘），并挑选离所有卡片最远的位置，
+    /// 避免下垂点滑到卡片上导致文字看不清。中段内有足够净空则取最低点，保留悬挂感。
+    private func chipAnchor(p0: CGPoint, control: CGPoint, p1: CGPoint, avoiding rects: [CGRect]) -> CGPoint {
+        func point(_ t: CGFloat) -> CGPoint {
+            let mt = 1 - t
+            return CGPoint(x: mt * mt * p0.x + 2 * mt * t * control.x + t * t * p1.x,
+                           y: mt * mt * p0.y + 2 * mt * t * control.y + t * t * p1.y)
+        }
+        let want: CGFloat = 30 * scale        // 期望的最小净空（约半个 chip + 间隙）
+        let steps = 28
+        var lowestClear: CGPoint? = nil
+        var mostOpen = point(0.5)
+        var mostOpenDist: CGFloat = -1
+
+        for i in 0...steps {
+            let t = 0.28 + 0.44 * CGFloat(i) / CGFloat(steps)   // 只在中段 [0.28, 0.72] 取点
+            let q = point(t)
+            let d = clearance(of: q, from: rects)
+            if d > mostOpenDist { mostOpenDist = d; mostOpen = q }
+            if d >= want, lowestClear == nil || q.y > lowestClear!.y { lowestClear = q }
+        }
+        return lowestClear ?? mostOpen
+    }
+
+    private func organizePreviewPosition(for object: BuilderObject) -> CGPoint {
+        guard organizeDetailsExpanded, let plan = organizer.plan else { return object.position }
+        return plan.ghostPositions[object.id] ?? object.position
+    }
+
     @ViewBuilder
-    private func organizeGhostLayer(_ plan: OrganizePlan) -> some View {
-        ZStack {
-            Canvas { ctx, _ in
-                for (id, target) in plan.ghostPositions {
-                    guard let obj = store.objects.first(where: { $0.id == id }) else { continue }
-                    var p = Path()
-                    p.move(to: worldToScreen(obj.position))
-                    p.addLine(to: worldToScreen(target))
-                    ctx.stroke(p, with: .color(.white.opacity(0.22)),
-                               style: .init(lineWidth: 1, dash: [3, 4]))
-                }
+    private var organizePreviewLinkLayer: some View {
+        if organizeDetailsExpanded, let plan = organizer.plan, !plan.proposedLinks.isEmpty {
+            Canvas { context, _ in
                 for link in plan.proposedLinks {
-                    guard let a = ghostPos(link.source, plan), let b = ghostPos(link.target, plan) else { continue }
-                    var p = Path()
-                    p.move(to: worldToScreen(a)); p.addLine(to: worldToScreen(b))
-                    ctx.stroke(p, with: .color(.white.opacity(0.55)),
-                               style: .init(lineWidth: 1.6, dash: [6, 5]))
+                    guard let a = store.objects.first(where: { $0.id == link.source }),
+                          let b = store.objects.first(where: { $0.id == link.target }) else { continue }
+                    let p0 = worldToScreen(organizePreviewPosition(for: a))
+                    let p1 = worldToScreen(organizePreviewPosition(for: b))
+                    let distance = max(hypot(p1.x - p0.x, p1.y - p0.y), 1)
+                    let sag = min(max(distance * 0.13, 24 * scale), 120 * scale)
+                    let mid = CGPoint(x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2)
+                    var path = Path()
+                    path.move(to: p0)
+                    path.addQuadCurve(to: p1, control: CGPoint(x: mid.x, y: mid.y + 2 * sag))
+                    context.stroke(
+                        path,
+                        with: .color(.white.opacity(0.66)),
+                        style: .init(lineWidth: 1.6, lineCap: .round, dash: [7, 5])
+                    )
                 }
             }
             .allowsHitTesting(false)
-
-            ForEach(Array(plan.ghostPositions.keys), id: \.self) { id in
-                if let obj = store.objects.first(where: { $0.id == id }) {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(0.05))
-                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.white.opacity(0.4), style: .init(lineWidth: 1, dash: [5, 4])))
-                        .frame(width: obj.size.width * scale, height: obj.size.height * scale)
-                        .position(worldToScreen(plan.ghostPositions[id] ?? obj.position))
-                        .allowsHitTesting(false)
-                }
-            }
+            .transition(.opacity)
         }
-        .transition(.opacity)
     }
 
-    private func ghostPos(_ id: String, _ plan: OrganizePlan) -> CGPoint? {
-        if let g = plan.ghostPositions[id] { return g }
-        return store.objects.first(where: { $0.id == id })?.position
+    @ViewBuilder
+    private var agentBuildOverlay: some View {
+        if let cursor = agentBuildCursor {
+            if let targetSize = cursor.targetSize, let targetCenter = cursor.targetCenter {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.38),
+                            style: .init(lineWidth: 1, dash: [6, 5]))
+                    .frame(width: targetSize.width * scale + 10,
+                           height: targetSize.height * scale + 10)
+                    .position(worldToScreen(targetCenter))
+                    .allowsHitTesting(false)
+            }
+
+            HStack(spacing: 7) {
+                ZStack {
+                    Circle().fill(Color.white.opacity(0.12))
+                    Circle().stroke(Color.white.opacity(0.72), lineWidth: 1)
+                    Circle().fill(Color.white).frame(width: 4, height: 4)
+                }
+                .frame(width: 18, height: 18)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(cursor.label)
+                        .font(AtlasFont.monoSmall)
+                        .foregroundStyle(AtlasColor.textPrimary)
+                    GeometryReader { proxy in
+                        Capsule()
+                            .fill(Color.white.opacity(0.12))
+                            .overlay(alignment: .leading) {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.78))
+                                    .frame(width: proxy.size.width * cursor.progress)
+                            }
+                    }
+                    .frame(width: 72, height: 2)
+                }
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .background(.ultraThinMaterial,
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.white.opacity(0.16)))
+            .shadow(color: .black.opacity(0.24), radius: 12, y: 6)
+            .position(worldToScreen(cursor.position))
+            .allowsHitTesting(false)
+            .animation(.easeInOut(duration: 0.28), value: cursor.position)
+            .animation(.linear(duration: 0.08), value: cursor.progress)
+            .transition(.scale(scale: 0.94).combined(with: .opacity))
+        }
     }
 
     private func timelineAxis(_ layout: TimelineLayout) -> some View {
@@ -681,29 +929,27 @@ struct WorldBuilderCanvas: View {
         }
     }
 
-    @ViewBuilder
     private var assistantFloatingCard: some View {
-        if assistantCardExpanded {
-            VStack(alignment: .leading, spacing: AtlasSpacing.m) {
-                HStack {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(AtlasColor.inverse)
-                        .frame(width: 52, height: 22)
-                        .background(Color.white, in: Capsule())
-                    Spacer()
-                    Button {
-                        withAnimation(.snappy(duration: 0.24)) { assistantCardExpanded = false }
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 11, weight: .semibold))
-                            .frame(width: 24, height: 24)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(AtlasColor.textSecondary)
-                    .help("收起回复卡")
+        let shape = RoundedRectangle(
+            cornerRadius: assistantCardExpanded ? 24 : 15,
+            style: .continuous
+        )
+        return VStack(alignment: .leading, spacing: assistantCardExpanded ? AtlasSpacing.m : 0) {
+            Button {
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.84)) {
+                    assistantCardExpanded.toggle()
                 }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(AtlasColor.inverse)
+                    .frame(width: 52, height: 22)
+                    .background(Color.white, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .help(assistantCardExpanded ? "收起回复卡" : "展开最新回复")
 
+            if assistantCardExpanded {
                 if let user = latestUserEntry {
                     promptPill(user)
                 }
@@ -719,92 +965,113 @@ struct WorldBuilderCanvas: View {
                         .lineLimit(12)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .topLeading)))
             }
-            .padding(AtlasSpacing.m)
-            .frame(width: 330, alignment: .leading)
-            .background(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.11),
-                        Color(red: 0.14, green: 0.14, blue: 0.16).opacity(0.84),
-                        Color.black.opacity(0.22)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-            )
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.white.opacity(0.13), lineWidth: 1))
-            .shadow(color: .black.opacity(0.34), radius: 22, y: 12)
-            .transition(.scale(scale: 0.82, anchor: .topLeading).combined(with: .opacity))
-        } else {
-            Button {
-                withAnimation(.snappy(duration: 0.24)) { assistantCardExpanded = true }
-            } label: {
-                Image(systemName: "bubble.left.and.text.bubble.right")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 56, height: 36)
-                    .foregroundStyle(AtlasColor.textPrimary)
-                    .atlasP1Glass(Capsule(), interactive: true)
-            }
-            .buttonStyle(.plain)
-            .help("展开最新回复")
-            .transition(.scale(scale: 0.86, anchor: .topLeading).combined(with: .opacity))
         }
+        .padding(assistantCardExpanded ? AtlasSpacing.m : 4)
+        .frame(width: assistantCardExpanded ? 330 : 60, alignment: .leading)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.11),
+                    Color(red: 0.14, green: 0.14, blue: 0.16).opacity(0.84),
+                    Color.black.opacity(0.22)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: shape
+        )
+        .background(.ultraThinMaterial, in: shape)
+        .overlay(
+            shape.stroke(
+                Color.white.opacity(agentIsThinking ? (thinkingGlowExpanded ? 0.52 : 0.16) : 0.13),
+                lineWidth: agentIsThinking ? 1.4 : 1
+            )
+        )
+        .overlay {
+            if agentIsThinking {
+                AngularGradient(
+                    colors: [
+                        .clear,
+                        Color.white.opacity(0.08),
+                        AtlasColor.auroraMint.opacity(0.72),
+                        Color.white.opacity(0.92),
+                        AtlasColor.auroraMint.opacity(0.24),
+                        .clear,
+                        .clear
+                    ],
+                    center: .center
+                )
+                .rotationEffect(.degrees(thinkingBorderRotation))
+                .mask(shape.stroke(lineWidth: 2))
+                .allowsHitTesting(false)
+            }
+        }
+        .shadow(color: .black.opacity(0.34), radius: 22, y: 12)
+        .shadow(
+            color: Color.white.opacity(agentIsThinking ? (thinkingGlowExpanded ? 0.24 : 0.05) : 0),
+            radius: thinkingGlowExpanded ? 24 : 8
+        )
+        .scaleEffect(
+            agentIsThinking && !reduceMotion
+                ? (thinkingGlowExpanded ? 1.006 : 0.998)
+                : 1,
+            anchor: .center
+        )
+        .offset(
+            y: agentIsThinking && !reduceMotion
+                ? (thinkingGlowExpanded ? -3 : 1)
+                : 0
+        )
+        .animation(.spring(response: 0.42, dampingFraction: 0.84), value: assistantCardExpanded)
+        .onAppear { setThinkingGlow(agentIsThinking) }
+        .onChange(of: agentIsThinking) { _, active in setThinkingGlow(active) }
     }
 
     private var sessionTray: some View {
-        Group {
+        let shape = RoundedRectangle(
+            cornerRadius: sessionExpanded ? AtlasRadius.panel : 18,
+            style: .continuous
+        )
+        return VStack(alignment: .leading, spacing: 0) {
             if sessionExpanded {
-                VStack(alignment: .leading, spacing: 0) {
-                    VStack(alignment: .leading, spacing: AtlasSpacing.s) {
-                        ForEach(recentSessionEntries) { entry in
-                            sessionChip(entry)
-                        }
+                VStack(alignment: .leading, spacing: AtlasSpacing.s) {
+                    ForEach(recentSessionEntries) { entry in
+                        sessionChip(entry)
                     }
-                    .padding(.horizontal, AtlasSpacing.m)
-                    .padding(.top, AtlasSpacing.m)
-                    .padding(.bottom, AtlasSpacing.s)
-
-                    Divider().overlay(AtlasColor.borderSubtle)
-
-                    Button {
-                        withAnimation(.snappy(duration: 0.24)) { sessionExpanded = false }
-                    } label: {
-                        HStack(spacing: AtlasSpacing.s) {
-                            Image(systemName: "paperplane")
-                            Text("智能体日志").font(AtlasFont.label)
-                            Spacer()
-                            Image(systemName: "chevron.down").font(.system(size: 12, weight: .semibold))
-                        }
-                        .foregroundStyle(AtlasColor.textPrimary)
-                        .padding(.horizontal, AtlasSpacing.m)
-                        .frame(height: 48)
-                    }
-                    .buttonStyle(.plain)
                 }
-                .frame(width: 330, alignment: .leading)
-                .atlasFrostedPanel(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
-                .transition(.move(edge: .leading).combined(with: .opacity))
-            } else {
-                Button {
-                    withAnimation(.snappy(duration: 0.24)) { sessionExpanded = true }
-                } label: {
-                    HStack(spacing: AtlasSpacing.s) {
-                        Image(systemName: "paperplane")
-                        Image(systemName: "chevron.up")
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    .foregroundStyle(AtlasColor.textPrimary)
-                    .padding(.horizontal, AtlasSpacing.m)
-                    .frame(height: 36)
-                    .atlasP1Glass(Capsule(), interactive: true)
-                }
-                .buttonStyle(.plain)
-                .transition(.scale(scale: 0.86, anchor: .bottomLeading).combined(with: .opacity))
+                .padding(.horizontal, AtlasSpacing.m)
+                .padding(.top, AtlasSpacing.m)
+                .padding(.bottom, AtlasSpacing.s)
+                .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .bottomLeading)))
+
+                Divider().overlay(AtlasColor.borderSubtle)
             }
+
+            Button {
+                withAnimation(.spring(response: 0.44, dampingFraction: 0.86)) {
+                    sessionExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: AtlasSpacing.s) {
+                    Image(systemName: "paperplane")
+                    Text("智能体日志")
+                        .font(AtlasFont.label)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Image(systemName: sessionExpanded ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(AtlasColor.textPrimary)
+                .padding(.horizontal, AtlasSpacing.m)
+                .frame(height: sessionExpanded ? 48 : 38)
+            }
+            .buttonStyle(.plain)
         }
+        .frame(width: sessionExpanded ? 330 : 154, alignment: .leading)
+        .atlasFrostedPanel(shape)
+        .animation(.spring(response: 0.44, dampingFraction: 0.86), value: sessionExpanded)
     }
 
     private var latestUserEntry: AgentSessionEntry? {
@@ -813,6 +1080,34 @@ struct WorldBuilderCanvas: View {
 
     private var latestAssistantEntry: AgentSessionEntry {
         sessionEntries.last { $0.kind != .user } ?? sessionEntries[0]
+    }
+
+    private var agentIsThinking: Bool {
+        organizer.isThinking || isParsingIntent || isResearchingInspiration || isAgentBuilding
+    }
+
+    private func setThinkingGlow(_ active: Bool) {
+        if active {
+            thinkingGlowExpanded = false
+            thinkingBorderRotation = 0
+
+            guard !reduceMotion else {
+                thinkingGlowExpanded = true
+                return
+            }
+
+            withAnimation(.easeInOut(duration: 1.65).repeatForever(autoreverses: true)) {
+                thinkingGlowExpanded = true
+            }
+            withAnimation(.linear(duration: 3.2).repeatForever(autoreverses: false)) {
+                thinkingBorderRotation = 360
+            }
+        } else {
+            withAnimation(.easeOut(duration: 0.28)) {
+                thinkingGlowExpanded = false
+                thinkingBorderRotation = 0
+            }
+        }
     }
 
     private var recentSessionEntries: [AgentSessionEntry] {
@@ -899,33 +1194,362 @@ struct WorldBuilderCanvas: View {
                 }
                 contextChipRow
 
-                HStack(spacing: AtlasSpacing.s) {
-                    modeToggle
-                    Divider().frame(height: 16).overlay(AtlasColor.borderSubtle)
-                    Image(systemName: commandMode == .organize
-                          ? "wand.and.stars"
-                          : (commandMode == .research ? "magnifyingglass" : (store.selected == nil ? "plus.circle" : "text.cursor")))
-                        .font(.system(size: 13))
-                        .foregroundStyle(AtlasColor.textTertiary)
-                    TextField(commandPlaceholder, text: $commandText)
+                VStack(alignment: .leading, spacing: 10) {
+                    if !attachedCanvasImageIDs.isEmpty {
+                        commandImageAttachmentRow
+                            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
+                    }
+
+                    TextField(commandPlaceholder, text: $commandText, axis: .vertical)
                         .textFieldStyle(.plain)
                         .font(AtlasFont.body)
                         .foregroundStyle(AtlasColor.textPrimary)
+                        .lineLimit(1...6)
+                        .frame(minHeight: 24, alignment: .topLeading)
                         .focused($commandFocused)
                         .onSubmit { runCommand() }
-                    Button { runCommand() } label: {
-                        Image(systemName: commandMode == .organize ? "wand.and.stars" : "arrow.up")
-                            .frame(width: 20, height: 20)
+
+                    HStack(spacing: 8) {
+                        commandAttachmentMenu
+
+                        if let skill = selectedFixedSkill {
+                            activeSkillChip(skill)
+                        }
+
+                        if let fileName = importedCommandFileName {
+                            importedFileChip(fileName)
+                        }
+
+                        Spacer(minLength: 12)
+
+                        Button { runCommand() } label: {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Color.black.opacity(0.9))
+                                .frame(width: 38, height: 38)
+                                .background(Color.white, in: Circle())
+                                .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!commandCanSend || organizer.isThinking || isParsingIntent || isResearchingInspiration || isAgentBuilding)
+                        .opacity(commandCanSend ? 1 : 0.46)
                     }
-                    .buttonStyle(.atlas(.primary))
-                    .disabled(commandText.trimmingCharacters(in: .whitespaces).isEmpty || organizer.isThinking || isParsingIntent || isResearchingInspiration)
                 }
-                .padding(.horizontal, AtlasSpacing.m)
-                .padding(.vertical, AtlasSpacing.s)
-                .frame(width: 560)
-                .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
+                .padding(12)
+                .frame(width: 620, alignment: .leading)
+                .atlasP1Glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .animation(.spring(response: 0.36, dampingFraction: 0.9), value: commandLineEstimate)
             }
             .padding(.bottom, AtlasSpacing.l)
+        }
+    }
+
+    private var commandLineEstimate: Int {
+        let explicitLines = commandText.reduce(1) { count, character in
+            character == "\n" ? count + 1 : count
+        }
+        let wrappedLines = max(1, Int(ceil(Double(commandText.count) / 48)))
+        return min(6, max(explicitLines, wrappedLines))
+    }
+
+    private var commandCanSend: Bool {
+        !commandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !attachedCanvasImageIDs.isEmpty
+    }
+
+    private var commandAttachmentMenu: some View {
+        Menu {
+            Button {
+                if canvasImageAttachments.isEmpty {
+                    model.showToast("当前画布里还没有可引用的图片")
+                } else {
+                    showCanvasImagePicker = true
+                }
+            } label: {
+                Label("导入画布图片", systemImage: "photo.on.rectangle.angled")
+            }
+
+            Menu {
+                ForEach(FixedCanvasSkill.allCases) { skill in
+                    Button {
+                        activateFixedSkill(skill)
+                    } label: {
+                        Label(skill.title, systemImage: skill.symbol)
+                    }
+                }
+            } label: {
+                Label("使用固定 Skill", systemImage: "hexagon")
+            }
+
+            Divider()
+
+            Button {
+                showCommandFileImporter = true
+            } label: {
+                Label("导入文件（Markdown / TXT）", systemImage: "doc.badge.plus")
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(AtlasColor.textPrimary)
+                .frame(width: 32, height: 32)
+                .background(Color.white.opacity(0.06), in: Circle())
+                .overlay(Circle().stroke(AtlasColor.borderSubtle))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("添加上下文")
+        .popover(isPresented: $showCanvasImagePicker, arrowEdge: .bottom) {
+            canvasImagePicker
+        }
+    }
+
+    private var canvasImageAttachments: [CanvasImageAttachment] {
+        store.objects.compactMap { object in
+            let values = Array(object.fields.values) + [object.summary]
+            guard let source = values.compactMap(extractImageReference).first else { return nil }
+            return CanvasImageAttachment(
+                objectID: object.id,
+                title: store.displayName(object),
+                source: source,
+                kind: object.kind
+            )
+        }
+    }
+
+    private var selectedCanvasImageAttachments: [CanvasImageAttachment] {
+        attachedCanvasImageIDs.compactMap { id in
+            canvasImageAttachments.first { $0.objectID == id }
+        }
+    }
+
+    private var commandImageAttachmentRow: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(selectedCanvasImageAttachments) { attachment in
+                    HStack(spacing: 8) {
+                        CanvasImageThumbnail(source: attachment.source)
+                            .frame(width: 54, height: 48)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(attachment.title)
+                                .font(AtlasFont.caption)
+                                .foregroundStyle(AtlasColor.textPrimary)
+                                .lineLimit(1)
+                            Text("画布 · \(attachment.kind.title)")
+                                .font(AtlasFont.monoSmall)
+                                .foregroundStyle(AtlasColor.textTertiary)
+                        }
+
+                        Button {
+                            withAnimation(.easeOut(duration: 0.18)) {
+                                attachedCanvasImageIDs.removeAll { $0 == attachment.objectID }
+                            }
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(Color(white: 0.34))
+                                .frame(width: 20, height: 20)
+                                .background(Color.white.opacity(0.92), in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(6)
+                    .frame(width: 188, alignment: .leading)
+                    .background(Color.white.opacity(0.055),
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(AtlasColor.borderSubtle))
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var canvasImagePicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("选择画布图片")
+                        .font(AtlasFont.label)
+                    Text("图片会作为固定格式附件加入对话")
+                        .font(AtlasFont.monoSmall)
+                        .foregroundStyle(AtlasColor.textTertiary)
+                }
+                Spacer()
+                Button {
+                    showCanvasImagePicker = false
+                } label: {
+                    Text("完成").font(AtlasFont.caption)
+                }
+                .buttonStyle(.atlas(.primary))
+            }
+
+            ScrollView {
+                LazyVGrid(columns: [
+                    GridItem(.fixed(150), spacing: 8),
+                    GridItem(.fixed(150), spacing: 8)
+                ], spacing: 8) {
+                    ForEach(canvasImageAttachments) { attachment in
+                        let selected = attachedCanvasImageIDs.contains(attachment.objectID)
+                        Button {
+                            withAnimation(.snappy(duration: 0.2)) {
+                                if selected {
+                                    attachedCanvasImageIDs.removeAll { $0 == attachment.objectID }
+                                } else {
+                                    attachedCanvasImageIDs.append(attachment.objectID)
+                                }
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 7) {
+                                CanvasImageThumbnail(source: attachment.source)
+                                    .frame(width: 138, height: 86)
+                                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                    .overlay(alignment: .topTrailing) {
+                                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                                            .font(.system(size: 15, weight: .semibold))
+                                            .foregroundStyle(selected ? Color.white : Color.white.opacity(0.72))
+                                            .padding(6)
+                                    }
+                                Text(attachment.title)
+                                    .font(AtlasFont.caption)
+                                    .foregroundStyle(AtlasColor.textPrimary)
+                                    .lineLimit(1)
+                            }
+                            .padding(6)
+                            .frame(width: 150, alignment: .leading)
+                            .background(
+                                selected ? Color.white.opacity(0.12) : Color.white.opacity(0.045),
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            )
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(selected ? Color.white.opacity(0.42) : AtlasColor.borderSubtle))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .frame(maxHeight: 300)
+        }
+        .padding(14)
+        .frame(width: 340)
+        .background(AtlasColor.elevated)
+    }
+
+    private func extractImageReference(from text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.lowercased().hasPrefix("data:image/") { return trimmed }
+
+        let pattern = #"(?:https?://|file://|/)[^\s\)]+\.(?:png|jpe?g|webp|gif|heic|tiff?|bmp)(?:\?[^\s\)]*)?"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return nil
+        }
+        let range = NSRange(trimmed.startIndex..<trimmed.endIndex, in: trimmed)
+        guard let match = regex.firstMatch(in: trimmed, range: range),
+              let matchRange = Range(match.range, in: trimmed) else { return nil }
+        return String(trimmed[matchRange])
+    }
+
+    private func activeSkillChip(_ skill: FixedCanvasSkill) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: skill.symbol)
+                .font(.system(size: 9, weight: .medium))
+            Text(skill.title)
+                .font(AtlasFont.monoSmall)
+                .lineLimit(1)
+            Button {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    selectedFixedSkill = nil
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .buttonStyle(.plain)
+        }
+        .foregroundStyle(AtlasColor.textSecondary)
+        .padding(.horizontal, 8)
+        .frame(height: 28)
+        .background(Color.white.opacity(0.055), in: Capsule())
+        .overlay(Capsule().stroke(AtlasColor.borderSubtle))
+    }
+
+    private func importedFileChip(_ fileName: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "doc.text")
+                .font(.system(size: 9, weight: .medium))
+            Text(fileName)
+                .font(AtlasFont.monoSmall)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 116)
+            Button {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    importedCommandFileName = nil
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .buttonStyle(.plain)
+        }
+        .foregroundStyle(AtlasColor.textSecondary)
+        .padding(.horizontal, 8)
+        .frame(height: 28)
+        .background(Color.white.opacity(0.055), in: Capsule())
+        .overlay(Capsule().stroke(AtlasColor.borderSubtle))
+    }
+
+    private var commandFileTypes: [UTType] {
+        [
+            UTType(filenameExtension: "md") ?? .plainText,
+            UTType(filenameExtension: "txt") ?? .plainText
+        ]
+    }
+
+    private func activateFixedSkill(_ skill: FixedCanvasSkill) {
+        withAnimation(.snappy(duration: 0.22)) {
+            selectedFixedSkill = skill
+            commandMode = skill.mode
+        }
+        commandFocused = true
+        appendSession(.system, title: "固定 Skill", body: "本次输入将使用「\(skill.title)」。")
+        model.showToast("已启用固定 Skill：\(skill.title)")
+    }
+
+    private func handleCommandFileImport(_ result: Result<URL, Error>) {
+        do {
+            let url = try result.get()
+            let fileExtension = url.pathExtension.lowercased()
+            guard fileExtension == "md" || fileExtension == "txt" else {
+                model.showToast("目前仅支持 Markdown 和 TXT 文件")
+                return
+            }
+
+            let hasSecurityAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if hasSecurityAccess { url.stopAccessingSecurityScopedResource() }
+            }
+
+            let data = try Data(contentsOf: url)
+            guard let text = String(data: data, encoding: .utf8) else {
+                model.showToast("文件不是 UTF-8 文本，暂时无法导入")
+                return
+            }
+
+            withAnimation(.spring(response: 0.36, dampingFraction: 0.9)) {
+                commandText = text
+                importedCommandFileName = url.lastPathComponent
+            }
+            commandFocused = true
+            appendSession(.parse, title: "导入文件",
+                          body: "已载入「\(url.lastPathComponent)」，发送前仍可编辑。")
+            model.showToast("文件内容已放入输入框")
+        } catch {
+            model.showToast("导入失败：\(error.localizedDescription)")
         }
     }
 
@@ -968,7 +1592,7 @@ struct WorldBuilderCanvas: View {
             }
             Spacer(minLength: 0)
         }
-        .frame(width: 560, alignment: .leading)
+        .frame(width: 620, alignment: .leading)
     }
 
     private var canvasActionRow: some View {
@@ -1010,7 +1634,7 @@ struct WorldBuilderCanvas: View {
 
             Spacer(minLength: 0)
         }
-        .frame(width: 560, alignment: .leading)
+        .frame(width: 620, alignment: .leading)
     }
 
     private func commandChip(_ title: String, number: Int) -> some View {
@@ -1049,10 +1673,11 @@ struct WorldBuilderCanvas: View {
             }
 
             HStack(spacing: AtlasSpacing.s) {
-                Button { adoptBatchDrafts() } label: {
+                Button { Task { await adoptBatchDrafts() } } label: {
                     AtlasButtonLabel(title: "采纳新建", systemImage: "checkmark")
                 }
                 .buttonStyle(.atlas(.primary))
+                .disabled(isAgentBuilding)
                 Button { withAnimation(.easeOut(duration: 0.2)) { batchDrafts = [] } } label: {
                     AtlasButtonLabel(title: "撤销", systemImage: "xmark")
                 }
@@ -1061,36 +1686,9 @@ struct WorldBuilderCanvas: View {
             }
             .padding(.top, 2)
         }
-        .frame(width: 560, alignment: .leading)
+        .frame(width: 620, alignment: .leading)
         .padding(.horizontal, AtlasSpacing.m).padding(.vertical, AtlasSpacing.s)
         .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
-    }
-
-    // 放置 / AI 整理 模式切换
-    private var modeToggle: some View {
-        HStack(spacing: 2) {
-            modeSeg("放置", .place, "plus")
-            modeSeg("灵感", .research, "sparkles")
-            modeSeg("整理", .organize, "wand.and.stars")
-        }
-        .padding(2)
-        .background(Color.white.opacity(0.05), in: Capsule())
-        .overlay(Capsule().stroke(AtlasColor.borderSubtle))
-    }
-
-    private func modeSeg(_ title: String, _ mode: CommandMode, _ symbol: String) -> some View {
-        Button {
-            withAnimation(.snappy(duration: 0.2)) { commandMode = mode; commandText = "" }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: symbol).font(.system(size: 9))
-                Text(title).font(AtlasFont.caption)
-            }
-            .foregroundStyle(commandMode == mode ? AtlasColor.inverse : AtlasColor.textSecondary)
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .background { if commandMode == mode { Capsule().fill(Color.white) } }
-        }
-        .buttonStyle(.plain)
     }
 
     // 整理方案预览面板（仅在思考/有方案/有错误时出现）
@@ -1101,7 +1699,7 @@ struct WorldBuilderCanvas: View {
                 ProgressView().controlSize(.small)
                 Text("正在整理画布…").font(AtlasFont.caption).foregroundStyle(AtlasColor.textSecondary)
             }
-            .frame(width: 560, alignment: .leading)
+            .frame(width: 620, alignment: .leading)
             .padding(.horizontal, AtlasSpacing.m).padding(.vertical, AtlasSpacing.s)
             .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
         } else if let plan = organizer.plan {
@@ -1115,16 +1713,71 @@ struct WorldBuilderCanvas: View {
                 }
                 .foregroundStyle(AtlasColor.textSecondary)
 
-                ForEach(Array(plan.summaries.prefix(4).enumerated()), id: \.offset) { _, s in
-                    HStack(spacing: 6) {
-                        Image(systemName: "circle.fill").font(.system(size: 3))
-                        Text(s).font(AtlasFont.caption).lineLimit(1)
-                    }
+                Text(plan.summaries.first ?? "方案已生成，可先在画布上查看整理结果。")
+                    .font(AtlasFont.caption)
                     .foregroundStyle(AtlasColor.textSecondary)
+                    .lineLimit(2)
+
+                Button {
+                    withAnimation(.spring(response: 0.56, dampingFraction: 0.84)) {
+                        organizeDetailsExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: organizeDetailsExpanded ? "eye.slash" : "eye")
+                        Text(organizeDetailsExpanded ? "收起详情并复位" : "查看预览与详情")
+                            .font(AtlasFont.caption)
+                        Spacer()
+                        Image(systemName: organizeDetailsExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                    .foregroundStyle(AtlasColor.textPrimary)
+                    .padding(.horizontal, AtlasSpacing.s)
+                    .frame(height: 32)
+                    .background(Color.white.opacity(0.055),
+                                in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(AtlasColor.borderSubtle))
                 }
-                if plan.summaries.count > 4 {
-                    Text("…等共 \(plan.summaries.count) 项").font(AtlasFont.monoSmall)
-                        .foregroundStyle(AtlasColor.textTertiary)
+                .buttonStyle(.plain)
+
+                if organizeDetailsExpanded {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: AtlasSpacing.s) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("具体调整").font(AtlasFont.monoSmall)
+                                    .foregroundStyle(AtlasColor.textTertiary)
+                                ForEach(Array(plan.summaries.enumerated()), id: \.offset) { _, summary in
+                                    HStack(alignment: .top, spacing: 7) {
+                                        Image(systemName: "circle.fill")
+                                            .font(.system(size: 3))
+                                            .padding(.top, 6)
+                                        Text(summary)
+                                            .font(AtlasFont.caption)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    .foregroundStyle(AtlasColor.textSecondary)
+                                }
+                            }
+
+                            Divider().overlay(AtlasColor.borderSubtle)
+
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("整理依据").font(AtlasFont.monoSmall)
+                                    .foregroundStyle(AtlasColor.textTertiary)
+                                MarkdownDetailText(plan.note.isEmpty
+                                    ? "依据对象类型、现有关系和画布密度生成；只调整布局与关系，不改写卡片正文。"
+                                    : plan.note)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .scrollIndicators(.visible)
+                    .frame(maxHeight: 172)
+                    .padding(AtlasSpacing.s)
+                    .background(Color.black.opacity(0.13),
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
                 }
 
                 HStack(spacing: AtlasSpacing.s) {
@@ -1134,6 +1787,7 @@ struct WorldBuilderCanvas: View {
                     .buttonStyle(.atlas(.primary))
                     Button {
                         appendSession(.parse, title: "撤销整理", body: "已丢弃当前整理方案。")
+                        organizeDetailsExpanded = false
                         organizer.discard()
                     } label: {
                         AtlasButtonLabel(title: "撤销", systemImage: "xmark")
@@ -1143,9 +1797,10 @@ struct WorldBuilderCanvas: View {
                 }
                 .padding(.top, 2)
             }
-            .frame(width: 560, alignment: .leading)
+            .frame(width: 620, alignment: .leading)
             .padding(.horizontal, AtlasSpacing.m).padding(.vertical, AtlasSpacing.s)
             .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
+            .animation(.spring(response: 0.5, dampingFraction: 0.86), value: organizeDetailsExpanded)
         } else if let err = organizer.errorText {
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle").font(.system(size: 11))
@@ -1153,7 +1808,7 @@ struct WorldBuilderCanvas: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .foregroundStyle(AtlasColor.textSecondary)
-            .frame(width: 560, alignment: .leading)
+            .frame(width: 620, alignment: .leading)
             .padding(.horizontal, AtlasSpacing.m).padding(.vertical, AtlasSpacing.s)
             .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
         }
@@ -1230,27 +1885,51 @@ struct WorldBuilderCanvas: View {
     // Stitch 式：一句话即落画布。不选中=新建对象（类型自动推断、随后可改）；
     // 选中=把这句话补进该对象的档案（真正的 AI 追问下一轮接入）。
     private func runCommand() {
-        let text = commandText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !isAgentBuilding else { return }
+        let attachments = selectedCanvasImageAttachments
+        let typedText = commandText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typedText.isEmpty || !attachments.isEmpty else { return }
+        let text = typedText.isEmpty ? "请结合这些画布图片继续。" : typedText
+        let routesToOrganize = commandMode == .organize
+            || (selectedFixedSkill == nil && shouldRouteToOrganize(text))
+        let routesToResearch = !routesToOrganize && (
+            commandMode == .research
+            || (selectedFixedSkill == nil && shouldRouteToResearch(text))
+        )
+        let inferredMode: CommandMode = routesToOrganize ? .organize : (routesToResearch ? .research : .place)
         let sessionTitle: String
-        switch commandMode {
+        switch inferredMode {
         case .organize: sessionTitle = "整理指令"
         case .research: sessionTitle = "灵感方向"
         case .place: sessionTitle = "画布指令"
         }
-        appendSession(.user, title: sessionTitle, body: text)
+        let attachmentSummary = attachments
+            .map { "画布图片 · \($0.title)" }
+            .joined(separator: "\n")
+        let sessionBody = attachmentSummary.isEmpty
+            ? text
+            : "\(text)\n\(attachmentSummary)"
+        appendSession(.user, title: sessionTitle, body: sessionBody)
+        importedCommandFileName = nil
+        attachedCanvasImageIDs = []
 
         // 整理通道：交给 Agent 生成待采纳的整理方案（只动布局与关系，不改正文）。
-        if commandMode == .organize {
+        if routesToOrganize {
+            organizeDetailsExpanded = false
             organizer.propose(instruction: text, store: store)
             appendSession(.parse, title: "正在生成整理方案", body: "模型会被限制为布局与关系工具，不会改写卡片正文。")
             commandText = ""
+            commandMode = .place
             return
         }
 
-        if commandMode == .research {
+        if routesToResearch {
+            if commandMode != .research {
+                appendSession(.parse, title: "识别为灵感研究", body: "已从放置指令切换到真实资料研究，不会把这段请求误建成画布卡片。")
+            }
             researchInspiration(text)
             commandText = ""
+            commandMode = .place
             return
         }
 
@@ -1265,6 +1944,7 @@ struct WorldBuilderCanvas: View {
             parseCanvasIntent(text)
         }
         commandText = ""
+        commandMode = .place
     }
 
     private func shouldRouteToSelectedObject(_ text: String) -> Bool {
@@ -1273,97 +1953,195 @@ struct WorldBuilderCanvas: View {
         return !createWords.contains { text.contains($0) }
     }
 
+    private func shouldRouteToResearch(_ text: String) -> Bool {
+        let researchWords = ["灵感", "真实存在", "可追溯", "原始资料", "资料来源", "附来源", "来源", "链接", "历史上的", "自然现象", "特殊习性", "习俗"]
+        return researchWords.contains { text.contains($0) }
+    }
+
+    private func shouldRouteToOrganize(_ text: String) -> Bool {
+        let organizeWords = [
+            "整理", "归类", "排列", "排布", "布局", "对齐", "聚拢", "分组",
+            "连接", "建立关系", "移除关系", "断开关系", "时间线", "按类型"
+        ]
+        return organizeWords.contains { text.contains($0) }
+    }
+
     private func parseCanvasIntent(_ text: String) {
         AgentTelemetry.track("agent_canvas_parse_requested")
+        guard AgentConfig.isConfigured else {
+            appendSession(.parse, title: "AI 未连接", body: "建档需要连接模型。请先在设置中配置 DeepSeek API Key；不会使用本地规则替你拆分设定。")
+            AgentTelemetry.track("agent_canvas_parse_blocked", properties: ["reason": "model_not_configured"])
+            return
+        }
         isParsingIntent = true
-        appendSession(.parse, title: AgentConfig.isConfigured ? "正在理解画布指令" : "本地规则解析", body: AgentConfig.isConfigured ? "使用建档助手技能：批量新建 / 命名解析 / 类型识别 / 摘要整理。" : "未配置模型 Key，使用本地关键词兜底。")
+        appendSession(.parse, title: "正在理解画布指令", body: "使用建档助手技能：批量新建 / 命名解析 / 类型识别 / 摘要整理。")
 
         Task { @MainActor in
-            let drafts: [BatchCreateDraft]
-            if AgentConfig.isConfigured {
-                do {
-                    let reply = try await DeepSeekClient().parseCanvasIntent(
-                        instruction: text,
-                        snapshot: CanvasOrganizer.snapshot(store)
-                    )
-                    drafts = reply.drafts.map { BatchCreateDraft(kind: $0.kind, name: $0.name, summary: $0.summary) }
-                } catch {
-                    appendSession(.parse, title: "模型解析失败，已降级", body: error.localizedDescription)
-                    drafts = CanvasIntentParser.parseBatchDrafts(from: text).map { BatchCreateDraft(kind: $0.kind, name: $0.name, summary: $0.summary) }
+            do {
+                let reply = try await DeepSeekClient().parseCanvasIntent(
+                    instruction: text,
+                    snapshot: CanvasOrganizer.snapshot(store)
+                )
+                let drafts = reply.drafts.map { BatchCreateDraft(kind: $0.kind, name: $0.name, summary: $0.summary) }
+                isParsingIntent = false
+                guard !drafts.isEmpty else {
+                    appendSession(.parse, title: "没有识别到可新建对象", body: "模型没有返回可采纳的对象草稿。可以换一种说法，或补充对象名称与类型。")
+                    return
                 }
-            } else {
-                drafts = CanvasIntentParser.parseBatchDrafts(from: text).map { BatchCreateDraft(kind: $0.kind, name: $0.name, summary: $0.summary) }
-            }
 
-            isParsingIntent = false
-            guard !drafts.isEmpty else {
-                appendSession(.parse, title: "没有识别到可新建对象", body: "可以试试：新建一个地点，命名为雾港。")
-                return
-            }
-
-            if drafts.count > 1 {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.84)) {
-                    batchDrafts = drafts
+                if drafts.count > 1 {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.84)) {
+                        batchDrafts = drafts
+                    }
+                    AgentTelemetry.track("agent_canvas_drafts_proposed", properties: ["count": "\(drafts.count)"])
+                    appendSession(.parse, title: "解析新建方案", body: batchSummary(drafts))
+                } else if let draft = drafts.first {
+                    await createDraftCard(draft)
+                    AgentTelemetry.track("agent_canvas_draft_created", properties: ["kind": draft.kind.rawValue])
+                    appendSession(.adopt, title: "新建草稿卡", body: "\(draft.kind.title) · \(draft.name)")
                 }
-                AgentTelemetry.track("agent_canvas_drafts_proposed", properties: ["count": "\(drafts.count)"])
-                appendSession(.parse, title: "解析新建方案", body: batchSummary(drafts))
-            } else if let draft = drafts.first {
-                createDraftCard(draft)
-                AgentTelemetry.track("agent_canvas_draft_created", properties: ["kind": draft.kind.rawValue])
-                appendSession(.adopt, title: "新建草稿卡", body: "\(draft.kind.title) · \(draft.name)")
+            } catch {
+                isParsingIntent = false
+                appendSession(.parse, title: "模型解析失败", body: error.localizedDescription)
+                AgentTelemetry.track("agent_canvas_parse_failed", properties: ["reason": "model_request_failed"])
             }
         }
     }
 
-    private func createDraftCard(_ draft: BatchCreateDraft) {
+    private func createDraftCard(_ draft: BatchCreateDraft) async {
         placeCount += 1
         let center = CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
         let angle = Double(placeCount) * 2.399
         let radius = 32.0 * Double(min(placeCount, 8))
         let screen = CGPoint(x: center.x + CGFloat(cos(angle) * radius),
                              y: center.y + CGFloat(sin(angle) * radius))
-        let world = screenToWorld(screen)
-        withAnimation(.snappy(duration: 0.25)) {
-            let newID = store.add(draft.kind, at: world)
-            if let i = store.objects.firstIndex(where: { $0.id == newID }) {
-                store.objects[i].name = draft.name
-                store.objects[i].summary = draft.summary
-                store.objects[i].aiAssisted = true
-            }
-        }
+        let preferred = screenToWorld(screen)
+        let world = store.nonOverlappingPosition(for: draft.kind.defaultSize, around: preferred)
+        _ = await performAgentBuild(drafts: [draft], positions: [world])
     }
 
     private func adoptOrganizePlan() {
         guard let plan = organizer.plan else { return }
         appendSession(.adopt, title: "采纳整理方案", body: plan.summaries.prefix(4).joined(separator: "\n"))
         organizer.adopt(into: store)
+        organizeDetailsExpanded = false
     }
 
-    private func adoptBatchDrafts() {
+    private func adoptBatchDrafts() async {
         let drafts = batchDrafts
-        guard !drafts.isEmpty else { return }
+        guard !drafts.isEmpty, !isAgentBuilding else { return }
         let cols = max(1, Int(ceil(sqrt(Double(drafts.count)))))
         let center = screenToWorld(CGPoint(x: viewSize.width / 2, y: viewSize.height / 2))
         let cellW: CGFloat = 280
         let cellH: CGFloat = 190
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
-            for (index, draft) in drafts.enumerated() {
-                let row = index / cols
-                let col = index % cols
-                let x = center.x + CGFloat(col) * cellW - CGFloat(cols - 1) * cellW / 2
-                let y = center.y + CGFloat(row) * cellH
-                let newID = store.add(draft.kind, at: CGPoint(x: x, y: y))
-                if let i = store.objects.firstIndex(where: { $0.id == newID }) {
-                    store.objects[i].name = draft.name
-                    store.objects[i].summary = draft.summary
-                    store.objects[i].aiAssisted = true
-                }
-            }
-            store.selectedIDs = Set(store.objects.suffix(drafts.count).map(\.id))
-            batchDrafts = []
+        let positions = drafts.indices.map { index in
+            let row = index / cols
+            let col = index % cols
+            let preferred = CGPoint(
+                x: center.x + CGFloat(col) * cellW - CGFloat(cols - 1) * cellW / 2,
+                y: center.y + CGFloat(row) * cellH
+            )
+            let resolved = store.nonOverlappingPosition(for: drafts[index].kind.defaultSize, around: preferred)
+            return resolved
         }
+        withAnimation(.easeOut(duration: 0.2)) { batchDrafts = [] }
+        _ = await performAgentBuild(drafts: drafts, positions: positions)
         appendSession(.adopt, title: "采纳批量新建", body: batchSummary(drafts))
         AgentTelemetry.track("agent_canvas_drafts_adopted", properties: ["count": "\(drafts.count)"])
+    }
+
+    @MainActor
+    private func performAgentBuild(
+        drafts: [BatchCreateDraft],
+        positions: [CGPoint]
+    ) async -> [String] {
+        guard !drafts.isEmpty, drafts.count == positions.count, !isAgentBuilding else { return [] }
+        isAgentBuilding = true
+        store.clearSelection()
+        appendSession(.parse, title: "智能体正在操作画布",
+                      body: "将依次放置卡片、填写区域并检查连接，不会一次性写入。")
+
+        var createdIDs: [String] = []
+        for (draft, requestedPosition) in zip(drafts, positions) {
+            let size = draft.kind.defaultSize
+            let position = store.nonOverlappingPosition(for: size, around: requestedPosition)
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                agentBuildCursor = AgentBuildCursor(
+                    position: CGPoint(x: position.x - size.width * 0.44,
+                                      y: position.y - size.height * 0.42),
+                    label: "放置\(draft.kind.title)卡",
+                    targetCenter: position,
+                    targetSize: size,
+                    progress: 0
+                )
+            }
+            try? await Task.sleep(for: .seconds(0.34))
+
+            var newID = ""
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
+                newID = store.add(draft.kind, at: position)
+                store.clearSelection()
+                if let index = store.objects.firstIndex(where: { $0.id == newID }) {
+                    store.objects[index].aiAssisted = true
+                }
+                agentBuildCursor?.progress = 1
+            }
+            createdIDs.append(newID)
+            try? await Task.sleep(for: .seconds(0.2))
+
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    agentBuildCursor = AgentBuildCursor(
+                        position: CGPoint(x: position.x - size.width * 0.32,
+                                          y: position.y - size.height * 0.08),
+                        label: "填写标题",
+                        targetCenter: position,
+                        targetSize: size,
+                        progress: 0
+                    )
+            }
+            await typeDraftText(draft.name, objectID: newID, keyPath: \.name, delay: .milliseconds(42))
+
+            if !draft.summary.isEmpty {
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    agentBuildCursor = AgentBuildCursor(
+                        position: CGPoint(x: position.x - size.width * 0.3,
+                                          y: position.y + size.height * 0.22),
+                        label: "填写内容区域",
+                        targetCenter: position,
+                        targetSize: size,
+                        progress: 0
+                    )
+                }
+                await typeDraftText(draft.summary, objectID: newID, keyPath: \.summary, delay: .milliseconds(20))
+            }
+            try? await Task.sleep(for: .seconds(0.16))
+
+        }
+
+        withAnimation(.easeOut(duration: 0.24)) {
+            agentBuildCursor = nil
+            store.selectedIDs = Set(createdIDs)
+        }
+        isAgentBuilding = false
+        return createdIDs
+    }
+
+    @MainActor
+    private func typeDraftText(
+        _ text: String,
+        objectID: String,
+        keyPath: WritableKeyPath<BuilderObject, String>,
+        delay: Duration
+    ) async {
+        var typed = ""
+        for (offset, character) in text.enumerated() {
+            guard let index = store.objects.firstIndex(where: { $0.id == objectID }) else { return }
+            typed.append(character)
+            store.objects[index][keyPath: keyPath] = typed
+            store.saved = false
+            agentBuildCursor?.progress = Double(offset + 1) / Double(max(text.count, 1))
+            try? await Task.sleep(for: delay)
+        }
     }
 
     private func batchSummary(_ drafts: [BatchCreateDraft]) -> String {
@@ -1382,7 +2160,7 @@ struct WorldBuilderCanvas: View {
                 Text("正在检索公开资料并核验来源…").font(AtlasFont.caption)
             }
             .foregroundStyle(AtlasColor.textSecondary)
-            .frame(width: 560, alignment: .leading)
+            .frame(width: 620, alignment: .leading)
             .padding(.horizontal, AtlasSpacing.m).padding(.vertical, AtlasSpacing.s)
             .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
         } else if let proposal = inspirationProposal {
@@ -1421,7 +2199,7 @@ struct WorldBuilderCanvas: View {
                 }
                 .padding(.top, 2)
             }
-            .frame(width: 560, alignment: .leading)
+            .frame(width: 620, alignment: .leading)
             .padding(.horizontal, AtlasSpacing.m).padding(.vertical, AtlasSpacing.s)
             .atlasP1Glass(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
         }
@@ -1436,6 +2214,7 @@ struct WorldBuilderCanvas: View {
         Task { @MainActor in
             do {
                 let proposal = try await InspirationResearchService().research(query: text)
+                appendSession(.research, title: "检索词已规划", body: proposal.searchQueries.map { "\"\($0)\"" }.joined(separator: " · "))
                 appendSession(.research, title: "已找到公开资料", body: "从 \(Set(proposal.cards.map { $0.source.provider }).joined(separator: "、")) 找到 \(proposal.cards.count) 条可用资料。")
                 AgentTelemetry.track("agent_inspiration_sources_loaded", properties: ["domain": proposal.domain.rawValue, "count": "\(proposal.cards.count)"])
                 appendSession(.verify, title: "来源核验完成", body: "每条灵感都绑定了可打开的原始资料链接。")
@@ -1455,7 +2234,9 @@ struct WorldBuilderCanvas: View {
         let center = screenToWorld(CGPoint(x: viewSize.width / 2, y: viewSize.height / 2))
         withAnimation(.spring(response: 0.4, dampingFraction: 0.84)) {
             for (index, card) in proposal.cards.enumerated() {
-                let id = store.add(.note, at: CGPoint(x: center.x + CGFloat(index) * 230, y: center.y))
+                let preferred = CGPoint(x: center.x + CGFloat(index) * 230, y: center.y)
+                let position = store.nonOverlappingPosition(for: BuilderKind.note.defaultSize, around: preferred)
+                let id = store.add(.note, at: position)
                 if let objectIndex = store.objects.firstIndex(where: { $0.id == id }) {
                     store.objects[objectIndex].name = card.title
                     store.objects[objectIndex].summary = "事实资料：\(card.fact)\n\n创作转译：\(card.creativeAngle)\n\n来源：\(card.source.provider)\n\(card.source.url.absoluteString)"
@@ -1673,6 +2454,64 @@ struct WorldBuilderCanvas: View {
     }
 }
 
+private struct CanvasImageThumbnail: View {
+    let source: String
+
+    var body: some View {
+        Group {
+            if let image = localImage {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if let url = URL(string: source),
+                      url.scheme == "http" || url.scheme == "https" {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure:
+                        fallback
+                    case .empty:
+                        ZStack {
+                            Color.white.opacity(0.055)
+                            ProgressView().controlSize(.small)
+                        }
+                    @unknown default:
+                        fallback
+                    }
+                }
+            } else {
+                fallback
+            }
+        }
+        .background(Color.white.opacity(0.045))
+    }
+
+    private var localImage: NSImage? {
+        if source.lowercased().hasPrefix("data:image/"),
+           let comma = source.firstIndex(of: ","),
+           let data = Data(base64Encoded: String(source[source.index(after: comma)...])) {
+            return NSImage(data: data)
+        }
+        if let url = URL(string: source), url.isFileURL {
+            return NSImage(contentsOf: url)
+        }
+        if source.hasPrefix("/") {
+            return NSImage(contentsOfFile: source)
+        }
+        return nil
+    }
+
+    private var fallback: some View {
+        ZStack {
+            Color.white.opacity(0.055)
+            Image(systemName: "photo")
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(AtlasColor.textTertiary)
+        }
+    }
+}
+
 // MARK: - 画布上的卡片（每类卡片有自己的设计；可拉角改尺寸）
 
 private struct ObjectCard: View {
@@ -1757,7 +2596,7 @@ private struct ObjectCard: View {
         if object.kind == .map {
             MapCardBody(name: "世界地图", coastPaths: store.mapCoastPaths, onExpand: onExpand)
         } else {
-            InfoCardBody(object: object, displayName: store.displayName(object))
+            InfoCardBody(object: object, displayName: store.displayName(object), store: store)
         }
     }
 
@@ -1948,16 +2787,66 @@ private struct MapCardBody: View {
 private struct InfoCardBody: View {
     var object: BuilderObject
     var displayName: String
+    @ObservedObject var store: WorldBuilderStore
 
     private enum Tier { case compact, regular, large }
 
     var body: some View {
         GeometryReader { proxy in
             let w = proxy.size.width, h = proxy.size.height
-            let tier: Tier = (w < 176 || h < 116) ? .compact : (w < 300 ? .regular : .large)
-            layout(tier)
-                .padding(pad(tier))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            if object.kind == .note {
+                noteLayout(width: w, height: h)
+                    .padding(notePadding(width: w, height: h))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                let tier: Tier = (w < 176 || h < 116) ? .compact : (w < 300 ? .regular : .large)
+                layout(tier)
+                    .padding(pad(tier))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+        }
+    }
+
+    private func notePadding(width: CGFloat, height: CGFloat) -> CGFloat {
+        (width < 176 || height < 116) ? 11 : (width >= 300 ? AtlasSpacing.l : AtlasSpacing.m)
+    }
+
+    private func noteLayout(width: CGFloat, height: CGFloat) -> some View {
+        let compact = width < 176 || height < 116
+        let titleLines = max(1, min(3, Int((height - (compact ? 34 : 58)) / 24)))
+        let bodyLines = max(1, Int((height - (compact ? 58 : 92) - CGFloat(titleLines * 23)) / 18))
+        return VStack(alignment: .leading, spacing: compact ? 7 : 9) {
+            HStack(spacing: AtlasSpacing.s) {
+                KindIcon(symbol: object.kind.symbol, size: compact ? 20 : (width >= 300 ? 26 : 24))
+                if !compact {
+                    Text(object.kind.title)
+                        .font(AtlasFont.monoSmall)
+                        .tracking(1)
+                        .foregroundStyle(AtlasColor.textTertiary)
+                }
+                Spacer(minLength: 0)
+                if object.aiAssisted {
+                    Image(systemName: "sparkle")
+                        .font(.system(size: 8))
+                        .foregroundStyle(AtlasColor.textTertiary)
+                }
+            }
+
+            Text(displayName)
+                .font(width >= 300 ? .system(size: 19) : AtlasFont.body)
+                .foregroundStyle(AtlasColor.textPrimary)
+                .lineLimit(titleLines)
+                .minimumScaleFactor(0.88)
+
+            if !object.summary.isEmpty, bodyLines > 0 {
+                Text(object.summary)
+                    .font(width >= 300 ? AtlasFont.body : AtlasFont.caption)
+                    .foregroundStyle(AtlasColor.textSecondary)
+                    .lineLimit(bodyLines)
+                    .multilineTextAlignment(.leading)
+            }
+
+            Spacer(minLength: 0)
         }
     }
 
@@ -2006,18 +2895,15 @@ private struct InfoCardBody: View {
                     TimeChip(time: time)
                 }
 
-                if object.summary.isEmpty {
-                    Text(object.kind.hint)
-                        .font(AtlasFont.caption)
-                        .foregroundStyle(AtlasColor.textTertiary)
-                        .lineLimit(tier == .large ? 2 : 1)
-                } else {
+                if tier == .large, !object.summary.isEmpty {
                     Text(object.summary)
-                        .font(tier == .large ? AtlasFont.body : AtlasFont.caption)
+                        .font(AtlasFont.body)
                         .foregroundStyle(AtlasColor.textSecondary)
-                        .lineLimit(tier == .large ? 5 : 2)
+                        .lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }
+
+                TypeFieldPreview(object: object, store: store, expanded: tier == .large)
 
                 Spacer(minLength: 0)
             }
@@ -2045,6 +2931,284 @@ private struct InfoCardBody: View {
         case .regular: return AtlasFont.serif(20, weight: .medium)
         case .large:   return AtlasFont.serif(26, weight: .medium)
         }
+    }
+}
+
+// MARK: - 类型专属画布摘要
+
+/// 不把详情表单缩小后硬塞进卡片，而是为每种类型挑出最有辨识度的结构。
+/// 常规尺寸显示一个核心构成，大尺寸再释放第二层信息。
+private struct TypeFieldPreview: View {
+    var object: BuilderObject
+    @ObservedObject var store: WorldBuilderStore
+    var expanded: Bool
+
+    private func value(_ key: String) -> String {
+        object.fields[key, default: ""].trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func firstLine(_ key: String) -> String {
+        value(key).split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+    }
+
+    private func linkedName(_ field: String) -> String? {
+        guard let relation = store.links(for: object.id, field: field).first,
+              let target = store.object(withID: relation.targetID) else { return nil }
+        return store.displayName(target)
+    }
+
+    var body: some View {
+        switch object.kind {
+        case .location: locationPreview
+        case .character: characterPreview
+        case .org: organizationPreview
+        case .event: eventPreview
+        case .rule: rulePreview
+        case .item: itemPreview
+        case .work: workPreview
+        case .note: notePreview
+        case .map: EmptyView()
+        }
+    }
+
+    private var locationPreview: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            previewRow(symbol: "mappin", label: value("位置").isEmpty ? "位置待定" : value("位置"))
+            if expanded {
+                previewRow(symbol: "waveform", label: value("感官速写").isEmpty ? "补一句所见、所闻或气味" : value("感官速写"))
+            }
+        }
+    }
+
+    private var characterPreview: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            if let faction = linkedName("阵营归属") {
+                previewRow(symbol: "building.2", label: faction)
+            }
+            StancePreview(rawValue: value("立场"))
+            if expanded {
+                let quote = value("代表台词")
+                Text(quote.isEmpty ? "“写下一句只有这个人会说的话”" : "“\(quote)”")
+                    .font(AtlasFont.caption)
+                    .italic()
+                    .foregroundStyle(quote.isEmpty ? AtlasColor.textTertiary : AtlasColor.textSecondary)
+                    .lineLimit(2)
+            }
+        }
+    }
+
+    private var organizationPreview: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HierarchyPreview(levels: value("阶层结构"))
+            if expanded {
+                previewRow(symbol: "quote.bubble", label: value("理念").isEmpty ? "这个组织相信什么？" : value("理念"))
+            }
+        }
+    }
+
+    private var eventPreview: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            previewRow(symbol: "switch.2", label: value("触发条件").isEmpty ? "尚未设定触发条件" : value("触发条件"))
+            if expanded {
+                HStack(spacing: 6) {
+                    BranchChip(title: "A", text: value("立场选择 A"))
+                    BranchChip(title: "B", text: value("立场选择 B"))
+                }
+            }
+        }
+    }
+
+    private var rulePreview: some View {
+        HStack(alignment: .top, spacing: 7) {
+            BoundaryCell(symbol: "checkmark", label: "允许", value: firstLine("能做什么"))
+            BoundaryCell(symbol: "xmark", label: "禁区", value: firstLine("不能做什么"))
+        }
+    }
+
+    private var itemPreview: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            let tags = value("属性").split(whereSeparator: { $0 == "，" || $0 == "," || $0.isNewline }).map(String.init)
+            if tags.isEmpty {
+                previewRow(symbol: "tag", label: "添加材质、状态或用途")
+            } else {
+                HStack(spacing: 5) {
+                    ForEach(Array(tags.prefix(expanded ? 4 : 2)), id: \.self) { tag in
+                        Text(tag.trimmingCharacters(in: .whitespaces))
+                            .font(AtlasFont.monoSmall)
+                            .foregroundStyle(AtlasColor.textSecondary)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    }
+                }
+            }
+            if expanded, let owner = linkedName("归属") {
+                previewRow(symbol: "person.crop.circle", label: owner)
+            }
+        }
+    }
+
+    private var workPreview: some View {
+        HStack(spacing: 9) {
+            Image(systemName: value("创作内容").isEmpty ? "plus.rectangle.on.rectangle" : "doc.richtext")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AtlasColor.textSecondary)
+                .frame(width: 32, height: 28)
+                .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value("创作内容").isEmpty ? "等待嵌入创作" : value("创作内容"))
+                    .font(AtlasFont.caption)
+                    .foregroundStyle(value("创作内容").isEmpty ? AtlasColor.textTertiary : AtlasColor.textSecondary)
+                    .lineLimit(1)
+                if expanded, !value("作者").isEmpty {
+                    Text("作者 · \(value("作者"))")
+                        .font(AtlasFont.monoSmall)
+                        .foregroundStyle(AtlasColor.textTertiary)
+                }
+            }
+        }
+    }
+
+    private var notePreview: some View {
+        Text(object.summary.isEmpty ? "随手记下一段尚未归类的想法" : object.summary)
+            .font(AtlasFont.caption)
+            .foregroundStyle(object.summary.isEmpty ? AtlasColor.textTertiary : AtlasColor.textSecondary)
+            .lineLimit(expanded ? 5 : 2)
+    }
+
+    private func previewRow(symbol: String, label: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 9.5, weight: .medium))
+                .foregroundStyle(AtlasColor.textTertiary)
+                .frame(width: 12)
+            Text(label)
+                .font(AtlasFont.caption)
+                .foregroundStyle(AtlasColor.textSecondary)
+                .lineLimit(expanded ? 2 : 1)
+        }
+    }
+}
+
+/// Renders model explanations as Markdown while removing pictographs that do
+/// not belong in Atlas's editorial UI. The plain-text fallback also strips
+/// Markdown markers so raw syntax never leaks into the detail panel.
+private struct MarkdownDetailText: View {
+    private let content: AttributedString
+
+    init(_ source: String) {
+        let cleaned = source.filter { character in
+            !character.unicodeScalars.contains {
+                $0.properties.isEmojiPresentation || $0.value == 0xFE0F
+            }
+        }
+        content = (try? AttributedString(
+            markdown: cleaned,
+            options: .init(interpretedSyntax: .full)
+        )) ?? AttributedString(
+            cleaned
+                .replacingOccurrences(of: "**", with: "")
+                .replacingOccurrences(of: "__", with: "")
+        )
+    }
+
+    var body: some View {
+        Text(content)
+            .font(AtlasFont.caption)
+            .foregroundStyle(AtlasColor.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private struct StancePreview: View {
+    var rawValue: String
+    private var position: CGFloat {
+        min(max(CGFloat(Double(rawValue) ?? 0.5), 0), 1)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("忠于阵营")
+                Spacer()
+                Text("背叛")
+            }
+            .font(AtlasFont.monoSmall)
+            .foregroundStyle(AtlasColor.textTertiary)
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.10)).frame(height: 2)
+                    Circle()
+                        .fill(AtlasColor.textPrimary)
+                        .frame(width: 6, height: 6)
+                        .offset(x: max(0, proxy.size.width * position - 3))
+                }
+                .frame(maxHeight: .infinity)
+            }
+            .frame(height: 6)
+        }
+    }
+}
+
+private struct HierarchyPreview: View {
+    var levels: String
+    private var names: [String] {
+        let parsed = levels.split(whereSeparator: { $0.isNewline || $0 == ">" || $0 == "／" }).map(String.init)
+        return parsed.isEmpty ? ["领袖", "中层", "成员"] : Array(parsed.prefix(3))
+    }
+
+    var body: some View {
+        VStack(spacing: 3) {
+            ForEach(Array(names.enumerated()), id: \.offset) { index, name in
+                HStack(spacing: 6) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.12 - Double(index) * 0.02))
+                        .frame(width: CGFloat(18 + index * 15), height: 4)
+                    Text(name.trimmingCharacters(in: .whitespaces))
+                        .font(AtlasFont.monoSmall)
+                        .foregroundStyle(AtlasColor.textTertiary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+}
+
+private struct BranchChip: View {
+    var title: String
+    var text: String
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(title).font(AtlasFont.monoSmall).foregroundStyle(AtlasColor.textPrimary)
+            Text(text.isEmpty ? "待定" : text)
+                .font(AtlasFont.caption)
+                .foregroundStyle(text.isEmpty ? AtlasColor.textTertiary : AtlasColor.textSecondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 7).padding(.vertical, 4)
+        .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+}
+
+private struct BoundaryCell: View {
+    var symbol: String
+    var label: String
+    var value: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Image(systemName: symbol).font(.system(size: 8, weight: .bold))
+                Text(label).font(AtlasFont.monoSmall)
+            }
+            .foregroundStyle(AtlasColor.textTertiary)
+            Text(value.isEmpty ? "尚未定义" : value)
+                .font(AtlasFont.caption)
+                .foregroundStyle(value.isEmpty ? AtlasColor.textTertiary : AtlasColor.textSecondary)
+                .lineLimit(2)
+        }
+        .padding(7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }
 
@@ -2178,8 +3342,15 @@ private struct DetailCard: View {
                         Divider().overlay(AtlasColor.borderSubtle)
                     }
 
+                    if object.kind != .map && object.kind != .note {
+                        TypeFieldsEditor(object: $object)
+                        Divider().overlay(AtlasColor.borderSubtle)
+                    }
+
                     VStack(alignment: .leading, spacing: AtlasSpacing.xs) {
-                        Text("档案内容").font(AtlasFont.caption).foregroundStyle(AtlasColor.textTertiary)
+                        Text(object.kind == .note ? "便签内容" : "补充档案")
+                            .font(AtlasFont.caption)
+                            .foregroundStyle(AtlasColor.textTertiary)
                         BuilderMentionEditor(object: $object, store: store)
                     }
 
@@ -2203,5 +3374,193 @@ private struct DetailCard: View {
         .padding(AtlasSpacing.l)
         .frame(maxHeight: .infinity, alignment: .top)
         .atlasFrostedPanel(RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous))
+    }
+}
+
+// MARK: - 详情卡里的类型专属字段
+
+private struct TypeFieldsEditor: View {
+    @Binding var object: BuilderObject
+
+    private func binding(_ key: String) -> Binding<String> {
+        Binding(
+            get: { object.fields[key, default: ""] },
+            set: { object.fields[key] = $0 }
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AtlasSpacing.m) {
+            HStack {
+                Text("\(object.kind.title)构成")
+                    .font(AtlasFont.label)
+                    .foregroundStyle(AtlasColor.textSecondary)
+                Spacer()
+                Text("画布可见")
+                    .font(AtlasFont.monoSmall)
+                    .foregroundStyle(AtlasColor.textTertiary)
+            }
+
+            switch object.kind {
+            case .location:
+                CanvasFieldInput(label: "位置", prompt: "无位置 / 相对描述 / 地图坐标",
+                                 text: binding("位置"), layer: .public)
+                CanvasFieldInput(label: "感官速写", prompt: "一眼看到、听到或闻到什么",
+                                 text: binding("感官速写"), layer: .public)
+                CanvasFieldInput(label: "在这里会发生什么", prompt: "遭遇、谜题或一次相遇",
+                                 text: binding("在这里会发生什么"), layer: .public, multiline: true)
+                CanvasFieldInput(label: "隐藏入口", prompt: "探索后才会发现的通路或秘密",
+                                 text: binding("隐藏入口"), layer: .reveal, multiline: true)
+
+            case .character:
+                StanceField(value: binding("立场"))
+                CanvasFieldInput(label: "代表台词", prompt: "一句话立住这个人",
+                                 text: binding("代表台词"), layer: .public, multiline: true)
+                CanvasFieldInput(label: "真实身份", prompt: "故事深入后才揭晓的身份",
+                                 text: binding("真实身份"), layer: .truth, multiline: true)
+
+            case .org:
+                CanvasFieldInput(label: "阶层结构", prompt: "领袖 > 中层 > 成员（可换行）",
+                                 text: binding("阶层结构"), layer: .public, multiline: true)
+                CanvasFieldInput(label: "理念", prompt: "这个势力相信什么",
+                                 text: binding("理念"), layer: .public, multiline: true)
+                CanvasFieldInput(label: "内幕", prompt: "不为外界所知的一面",
+                                 text: binding("内幕"), layer: .reveal, multiline: true)
+
+            case .event:
+                CanvasFieldInput(label: "触发条件", prompt: "满足什么条件时发生",
+                                 text: binding("触发条件"), layer: .public, multiline: true)
+                HStack(alignment: .top, spacing: AtlasSpacing.s) {
+                    CanvasFieldInput(label: "选择 A", prompt: "一种立场",
+                                     text: binding("立场选择 A"), layer: .public, multiline: true)
+                    CanvasFieldInput(label: "选择 B", prompt: "另一种立场",
+                                     text: binding("立场选择 B"), layer: .reveal, multiline: true)
+                }
+                CanvasFieldInput(label: "结局分叉", prompt: "不同选择分别导向哪里",
+                                 text: binding("结局分叉"), layer: .truth, multiline: true)
+
+            case .rule:
+                HStack(alignment: .top, spacing: AtlasSpacing.s) {
+                    CanvasFieldInput(label: "能做什么", prompt: "能力范围",
+                                     text: binding("能做什么"), layer: .public, multiline: true)
+                    CanvasFieldInput(label: "不能做什么", prompt: "明确禁区",
+                                     text: binding("不能做什么"), layer: .public, multiline: true)
+                }
+                CanvasFieldInput(label: "代价", prompt: "使用这套力量要付出什么",
+                                 text: binding("代价"), layer: .public, multiline: true)
+                CanvasFieldInput(label: "检定机制", prompt: "骰子、属性或判定逻辑",
+                                 text: binding("检定机制"), layer: .reveal, multiline: true)
+
+            case .item:
+                CanvasFieldInput(label: "属性", prompt: "用逗号分隔：材质，状态，用途",
+                                 text: binding("属性"), layer: .public)
+                CanvasFieldInput(label: "谜题碎片", prompt: "物件里藏着的线索",
+                                 text: binding("谜题碎片"), layer: .truth, multiline: true)
+
+            case .work:
+                CanvasFieldInput(label: "创作内容", prompt: "作品、文件、音频或链接",
+                                 text: binding("创作内容"), layer: .public, multiline: true)
+                CanvasFieldInput(label: "作者", prompt: "创作者或角色名",
+                                 text: binding("作者"), layer: .public)
+
+            case .map, .note:
+                EmptyView()
+            }
+        }
+    }
+}
+
+private enum FieldLayer {
+    case `public`, reveal, truth
+
+    var label: String {
+        switch self {
+        case .public: return "公开"
+        case .reveal: return "揭示"
+        case .truth: return "真相"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .public: return "globe"
+        case .reveal: return "lock.open"
+        case .truth: return "lock"
+        }
+    }
+}
+
+private struct CanvasFieldInput: View {
+    var label: String
+    var prompt: String
+    @Binding var text: String
+    var layer: FieldLayer
+    var multiline = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Text(label)
+                    .font(AtlasFont.caption)
+                    .foregroundStyle(AtlasColor.textSecondary)
+                Spacer(minLength: 3)
+                Image(systemName: layer.symbol)
+                    .font(.system(size: 8.5, weight: .medium))
+                Text(layer.label)
+                    .font(AtlasFont.monoSmall)
+            }
+            .foregroundStyle(AtlasColor.textTertiary)
+
+            if multiline {
+                TextField(prompt, text: $text, axis: .vertical)
+                    .lineLimit(2...4)
+                    .textFieldStyle(.plain)
+                    .font(AtlasFont.caption)
+                    .foregroundStyle(AtlasColor.textPrimary)
+                    .padding(9)
+                    .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(AtlasColor.borderSubtle))
+            } else {
+                TextField(prompt, text: $text)
+                    .textFieldStyle(.plain)
+                    .font(AtlasFont.caption)
+                    .foregroundStyle(AtlasColor.textPrimary)
+                    .padding(9)
+                    .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(AtlasColor.borderSubtle))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct StanceField: View {
+    @Binding var value: String
+
+    private var numericBinding: Binding<Double> {
+        Binding(
+            get: { min(max(Double(value) ?? 0.5, 0), 1) },
+            set: { value = String(format: "%.2f", $0) }
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text("立场").font(AtlasFont.caption).foregroundStyle(AtlasColor.textSecondary)
+                Spacer()
+                Image(systemName: "globe").font(.system(size: 8.5, weight: .medium))
+                Text("公开").font(AtlasFont.monoSmall)
+            }
+            .foregroundStyle(AtlasColor.textTertiary)
+            HStack(spacing: 8) {
+                Text("忠于阵营")
+                Slider(value: numericBinding, in: 0...1)
+                    .controlSize(.small)
+                Text("背叛")
+            }
+            .font(AtlasFont.monoSmall)
+            .foregroundStyle(AtlasColor.textTertiary)
+        }
     }
 }
