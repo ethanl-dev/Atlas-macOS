@@ -21,7 +21,7 @@ struct WorldCanvasView: View {
 
     var body: some View {
         ZStack {
-            AtlasCanvasBackground()
+            AtlasCanvasBackground(animated: true)
             terrain
                 .scaleEffect(zoom)
 

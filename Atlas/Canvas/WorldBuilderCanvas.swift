@@ -121,7 +121,7 @@ struct WorldBuilderCanvas: View {
                 ? TimelineLayout.make(events: store.objects.filter { $0.kind == .event })
                 : TimelineLayout()
             ZStack {
-                AtlasCanvasBackground()
+                AtlasCanvasBackground(animated: true)
                     .allowsHitTesting(false)
 
                 // 专门接住空白处点击 → 取消选中（放在卡片下面；点卡片会被卡片先接走）
@@ -621,7 +621,9 @@ struct WorldBuilderCanvas: View {
         Menu {
             Toggle("显示地图底盘", isOn: $store.showMapBase)
             Button {
-                showMapEditor = true
+                withAnimation(.spring(response: 0.48, dampingFraction: 0.86)) {
+                    showMapEditor = true
+                }
             } label: {
                 Label(store.mapMade ? "编辑地图底盘…" : "绘制地图底盘…", systemImage: "map")
             }
@@ -1195,7 +1197,12 @@ struct WorldBuilderCanvas: View {
         if showMapEditor {
             WorldMapCanvasView(
                 mode: store.mapMade ? "manage" : "create",
-                onExit: { withAnimation(.snappy(duration: 0.3)) { showMapEditor = false } },
+                canEdit: canEdit,
+                onExit: {
+                    withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
+                        showMapEditor = false
+                    }
+                },
                 onSave: { _, _ in
                     // 就地生成海岸线并留在编辑器里让用户看到结果；返回由用户点“返回”触发
                     store.mapMade = true
@@ -1204,7 +1211,16 @@ struct WorldBuilderCanvas: View {
                 }
             )
             .ignoresSafeArea()
-            .transition(.opacity)
+            .transition(
+                .asymmetric(
+                    insertion: .opacity.combined(
+                        with: .scale(scale: 0.965, anchor: .center)
+                    ),
+                    removal: .opacity.combined(
+                        with: .scale(scale: 0.982, anchor: .center)
+                    )
+                )
+            )
             .zIndex(10)
         }
     }
@@ -1519,7 +1535,9 @@ struct WorldBuilderCanvas: View {
 
     private func openMapEditor(_ id: String) {
         store.selectedID = id
-        withAnimation(.snappy(duration: 0.3)) { showMapEditor = true }
+        withAnimation(.spring(response: 0.48, dampingFraction: 0.86)) {
+            showMapEditor = true
+        }
     }
 
     private var panGesture: some Gesture {

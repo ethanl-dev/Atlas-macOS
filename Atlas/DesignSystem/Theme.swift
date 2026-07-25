@@ -98,6 +98,8 @@ enum AtlasFont {
 // 近黑 + Lightfall 光雨。给液态玻璃提供可折射的高对比动态纹理。
 
 struct AtlasCanvasBackground: View {
+    var animated: Bool = false
+
     var body: some View {
         ZStack {
             Color.black
@@ -106,7 +108,11 @@ struct AtlasCanvasBackground: View {
             // 与首页星图一致的彩色深空光晕；内容层仍保持高对比黑底。
             GeometryReader { proxy in
                 let size = proxy.size
-                AtlasLightfallBackground(size: size)
+                if animated {
+                    AtlasLightfallBackground(size: size)
+                } else {
+                    AtlasStaticAuroraBackground(size: size)
+                }
             }
             .ignoresSafeArea()
             .blendMode(.plusLighter)
@@ -142,6 +148,30 @@ struct AtlasCanvasBackground: View {
             .blendMode(.plusLighter)
         }
         .background(AtlasColor.canvas)
+    }
+}
+
+private struct AtlasStaticAuroraBackground: View {
+    let size: CGSize
+
+    var body: some View {
+        ZStack {
+            Color(red: 0.015, green: 0.014, blue: 0.025)
+
+            Ellipse()
+                .fill(Color(red: 0.24, green: 0.11, blue: 0.64).opacity(0.18))
+                .frame(width: size.width * 0.72, height: size.height * 0.58)
+                .blur(radius: 135)
+                .offset(x: size.width * 0.46, y: -size.height * 0.18)
+
+            Ellipse()
+                .fill(Color(red: 0.08, green: 0.34, blue: 0.29).opacity(0.13))
+                .frame(width: size.width * 0.58, height: size.height * 0.48)
+                .blur(radius: 125)
+                .offset(x: -size.width * 0.32, y: size.height * 0.22)
+        }
+        .saturation(1.12)
+        .drawingGroup()
     }
 }
 
