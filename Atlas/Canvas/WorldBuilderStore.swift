@@ -61,7 +61,7 @@ enum BuilderKind: String, CaseIterable, Identifiable {
 
     var hint: String {
         switch self {
-        case .map: return "世界底盘的预览"
+        case .map: return "用户绘制的世界地图"
         case .location: return "钉在坐标的地方"
         case .character: return "可驻留在地点的人"
         case .org: return "势力、阵营或组织"
@@ -93,6 +93,11 @@ enum BuilderKind: String, CaseIterable, Identifiable {
 
 enum BuilderShape { case pin, circle, hexagon, diamond, square, note }
 
+enum MapPlacementKind: String {
+    case point = "设定点"
+    case area = "范围影响"
+}
+
 // MARK: - 世界对象
 
 struct BuilderObject: Identifiable {
@@ -106,6 +111,8 @@ struct BuilderObject: Identifiable {
     var position: CGPoint      // 画布世界坐标（卡片中心）
     var size: CGSize           // 卡片尺寸（世界坐标，可拉角改变）
     var aiAssisted: Bool = false
+    /// 对应地图标注的 id；为空表示这张 Canvas 卡片尚未定位到地图。
+    var mapAnnotationID: String? = nil
     /// 事件卡的时间元素（阶段 + 可选世界内日期）。仅 .event 有意义；其它类型为 nil。
     var time: EventTime? = nil
 }
@@ -231,9 +238,9 @@ final class WorldBuilderStore: ObservableObject {
     }
 
     private var groupDragAnchors: [String: CGPoint]?
-    @Published var showMapBase = false      // 全画布地图底盘 underlay（地图现在主要以卡片存在，默认关）
     @Published var mapMade = false          // 是否已经绘制过地图底盘
     @Published var saved = true
+    @Published var mapJSON: String?
 
     private var counter = 0
 
@@ -241,7 +248,7 @@ final class WorldBuilderStore: ObservableObject {
         self.worldName = worldName
         if seeded {
             self.objects = [
-                .init(id: "map-seed", kind: .map, name: "世界底盘",
+                .init(id: "map-seed", kind: .map, name: "世界地图",
                       summary: "",
                       position: CGPoint(x: 470, y: 330), size: BuilderKind.map.defaultSize),
                 .init(id: "loc-seed", kind: .location, name: "雾港",
@@ -450,5 +457,174 @@ final class WorldBuilderStore: ObservableObject {
 
     func displayName(_ object: BuilderObject) -> String {
         object.name.trimmingCharacters(in: .whitespaces).isEmpty ? "未命名\(object.kind.title)" : object.name
+    }
+
+    var unlocatedObjects: [BuilderObject] {
+        objects.filter { $0.kind != .map && $0.mapAnnotationID == nil }
+    }
+
+    func preferredMapPlacement(for object: BuilderObject) -> MapPlacementKind {
+        object.kind == .event || object.kind == .rule ? .area : .point
+    }
+
+    func pendingMapPlacementsJSON() -> String? {
+        let payload: [[String: String]] = unlocatedObjects.map { object in
+            [
+                "id": object.id,
+                "name": displayName(object),
+                "placement": preferredMapPlacement(for: object).rawValue,
+                "category": mapCategory(for: object.kind),
+                "color": mapCategoryColor(for: object.kind)
+            ]
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return nil }
+        return json
+    }
+
+    /// 地图是空间投影，Canvas 是内容主数据。地图保存后只补齐/更新对应卡片，
+    /// 不删除 Canvas 中尚未定位的原创卡片。
+    func synchronizeMap(_ json: String) {
+        guard let data = json.data(using: .utf8),
+              let archive = try? JSONDecoder().decode(MapArchive.self, from: data) else { return }
+        mapJSON = json
+
+        let spatial = archive.annotations.filter { $0.kind == "point" || $0.kind == "area" }
+        let liveIDs = Set(spatial.map(\.id))
+
+        for index in objects.indices {
+            if let annotationID = objects[index].mapAnnotationID,
+               !liveIDs.contains(annotationID) {
+                objects[index].mapAnnotationID = nil
+            }
+        }
+
+        for (offset, annotation) in spatial.enumerated() {
+            let kind = builderKind(for: annotation)
+            let fallback = annotation.kind == "area" ? "未命名范围影响" : "未命名\(kind.title)"
+            if let index = objects.firstIndex(where: {
+                $0.mapAnnotationID == annotation.id || $0.id == annotation.id
+            }) {
+                objects[index].mapAnnotationID = annotation.id
+                objects[index].kind = kind
+                objects[index].name = annotation.title?.nonEmpty ?? fallback
+                objects[index].summary = annotation.description?.nonEmpty ?? objects[index].summary
+            } else {
+                let column = CGFloat(offset % 4)
+                let row = CGFloat(offset / 4)
+                objects.append(
+                    BuilderObject(
+                        id: "map-\(annotation.id)",
+                        kind: kind,
+                        name: annotation.title?.nonEmpty ?? fallback,
+                        summary: annotation.description?.nonEmpty ?? "",
+                        position: CGPoint(x: 620 + column * 280, y: 250 + row * 190),
+                        size: kind.defaultSize,
+                        mapAnnotationID: annotation.id,
+                        time: kind == .event ? EventTime(phase: .rising) : nil
+                    )
+                )
+            }
+        }
+
+        // 关系先落入统一数据模型；具体连线视觉由协作中的关系层继续负责。
+        for annotation in archive.annotations where annotation.kind == "line" {
+            guard let sourceMapID = annotation.sourceId,
+                  let targetMapID = annotation.targetId,
+                  let source = objects.first(where: { $0.mapAnnotationID == sourceMapID }),
+                  let target = objects.first(where: { $0.mapAnnotationID == targetMapID }) else { continue }
+            let relationID = "map-\(annotation.id)"
+            let relation = BuilderRelation(
+                id: relationID,
+                sourceID: source.id,
+                targetID: target.id,
+                label: annotation.category ?? "关联",
+                title: annotation.title ?? ""
+            )
+            if let index = relations.firstIndex(where: { $0.id == relationID }) {
+                relations[index] = relation
+            } else {
+                relations.append(relation)
+            }
+        }
+
+        mapMade = true
+        saved = false
+    }
+
+    private func builderKind(for annotation: MapAnnotationArchive) -> BuilderKind {
+        if annotation.kind == "area" {
+            return annotation.category?.contains("规则") == true ? .rule : .event
+        }
+        switch annotation.category {
+        case "地点": return .location
+        case "NPC", "角色": return .character
+        case "阵营", "组织": return .org
+        case "物品", "物件": return .item
+        case "作品": return .work
+        default: return .note
+        }
+    }
+
+    private func mapCategory(for kind: BuilderKind) -> String {
+        switch kind {
+        case .location: return "地点"
+        case .character: return "角色"
+        case .org: return "组织"
+        case .item: return "物件"
+        case .work: return "作品"
+        case .event: return "范围影响"
+        case .rule: return "规则"
+        default: return "自定义类别"
+        }
+    }
+
+    private func mapCategoryColor(for kind: BuilderKind) -> String {
+        switch kind {
+        case .location: return "#59C3A5"
+        case .character: return "#F08A72"
+        case .org: return "#7DA7FF"
+        case .item: return "#E5B95C"
+        case .work: return "#C58BFA"
+        case .note: return "#AEB6C4"
+        case .event: return "#FF8F5C"
+        case .rule: return "#62D1D8"
+        default: return "#AEB6C4"
+        }
+    }
+
+    var mapCoastPaths: [[CGPoint]] {
+        guard let mapJSON,
+              let data = mapJSON.data(using: .utf8),
+              let archive = try? JSONDecoder().decode(MapArchive.self, from: data) else { return [] }
+        return archive.coasts.map { path in path.map { CGPoint(x: $0.x, y: $0.y) } }
+    }
+}
+
+private struct MapArchive: Decodable {
+    var annotations: [MapAnnotationArchive]
+    var coasts: [[MapPointArchive]] = []
+}
+
+private struct MapPointArchive: Decodable {
+    var x: Double
+    var y: Double
+}
+
+private struct MapAnnotationArchive: Decodable {
+    var id: String
+    var kind: String
+    var title: String?
+    var category: String?
+    var description: String?
+    var sourceId: String?
+    var targetId: String?
+}
+
+private extension String {
+    var nonEmpty: String? {
+        let value = trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        return value
     }
 }

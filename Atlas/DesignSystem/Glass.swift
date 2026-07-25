@@ -139,6 +139,17 @@ extension View {
         .shadow(color: .black.opacity(0.30), radius: 24, y: 12)
     }
 
+    /// 左下角头像品牌 Dock 同款玻璃。保持原生玻璃层独立，避免 compositingGroup
+    /// 将动态折射预先栅格化成静态磨砂。
+    func atlasFloatingGlass<S: Shape>(
+        _ shape: S = RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous),
+        interactive: Bool = false
+    ) -> some View {
+        atlasGlass(shape, interactive: interactive)
+            .overlay(shape.stroke(Color.white.opacity(0.16), lineWidth: 1))
+            .shadow(color: .black.opacity(0.24), radius: 18, y: 8)
+    }
+
     /// 带语义色的流动玻璃。色彩只做局部光源，文字仍保持高对比。
     func atlasChromaticGlass<S: Shape>(
         _ shape: S = RoundedRectangle(cornerRadius: AtlasRadius.card, style: .continuous),
@@ -163,6 +174,7 @@ extension View {
         }
         .shadow(color: tint.opacity(0.13), radius: 22, y: 8)
     }
+
 }
 
 // MARK: - 玻璃容器

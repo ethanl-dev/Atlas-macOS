@@ -260,6 +260,188 @@ input[type=range]{accent-color:#f4f4f6}
 .coast-options button.selected{background:rgba(255,255,255,.14)!important;border-color:rgba(255,255,255,.36)!important}
 .dialog-cancel{color:var(--ink-2)}
 .dialog-cancel:hover{background:var(--hover)}
+
+/* —— Atlas Canvas 过渡与彩光液态玻璃统一 —— */
+@keyframes atlasEditorArrive{
+  0%{opacity:0;transform:scale(.985);filter:saturate(.82) brightness(.72)}
+  55%{opacity:1;filter:saturate(1.08) brightness(.96)}
+  100%{opacity:1;transform:scale(1);filter:none}
+}
+.editor-shell{
+  position:relative;
+  overflow:hidden;
+  background:
+    radial-gradient(70% 58% at 88% 4%,rgba(103,54,196,.20),transparent 66%),
+    radial-gradient(62% 54% at 8% 92%,rgba(38,155,126,.15),transparent 68%),
+    #07080d!important;
+  animation:atlasEditorArrive .52s cubic-bezier(.16,1,.3,1) both;
+}
+.editor-top{
+  position:fixed;inset:0;z-index:110;pointer-events:none;
+  width:100%;height:0;flex-basis:0;margin:0;padding:0!important;
+  border:0!important;background:transparent!important;box-shadow:none!important;
+}
+.editor-title>span,.editor-history{display:none!important}
+.editor-top button{pointer-events:auto}
+.editor-actions{
+  position:fixed;right:24px;top:24px;display:flex;gap:8px;
+  padding:4px;border-radius:24px;
+  background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(12,14,22,.52));
+  border:1px solid rgba(255,255,255,.18);
+  box-shadow:inset 0 1px rgba(255,255,255,.26),0 14px 38px rgba(0,0,0,.36)}
+.editor-actions{display:none!important}
+.editor-actions button{height:36px!important;border-radius:18px!important}
+.editor-actions .dark-button{display:none!important}
+.editor-history{
+  display:flex!important;position:fixed;left:auto;right:158px;top:25px;transform:none;
+  gap:3px;padding:4px;border-radius:22px;pointer-events:auto;
+  z-index:135;
+  background:linear-gradient(145deg,rgba(255,255,255,.10),rgba(12,14,22,.50));
+  border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px rgba(255,255,255,.22),0 14px 34px rgba(0,0,0,.32)}
+.editor-history button{height:34px;padding:0 13px;border-radius:17px}
+.editor-body{padding:12px;gap:10px}
+.tool-dock{
+  padding-top:76px!important;
+  border:1px solid rgba(255,255,255,.13);
+  border-radius:18px;
+  background:linear-gradient(155deg,rgba(255,255,255,.09),rgba(16,17,24,.58))!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.18),0 18px 45px rgba(0,0,0,.36)!important;
+}
+.editor-canvas{
+  border-radius:20px;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 22px 55px rgba(0,0,0,.34);
+}
+.back-button{width:40px;height:40px;border-radius:50%;
+  background:rgba(255,255,255,.065);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+.back-button:hover{background:rgba(255,255,255,.13);transform:scale(1.04)}
+.back-button i{left:16px;top:14px}
+.soft-button,.dark-button,.editor-history,.layers-toggle,.brush-popover,.scale-bar{
+  -webkit-backdrop-filter:blur(22px) saturate(1.2);backdrop-filter:blur(22px) saturate(1.2);
+}
+.layers-panel,.floating-card,.setup-dialog{
+  background:
+    linear-gradient(145deg,rgba(255,255,255,.10),rgba(15,16,24,.62))!important;
+  border:1px solid rgba(255,255,255,.13);
+  box-shadow:inset 0 1px rgba(255,255,255,.20),0 22px 58px rgba(0,0,0,.48)!important;
+}
+@media(max-width:1000px){
+  .editor-body{padding:8px;gap:8px}
+}
+
+/* —— 无界地图查看页：只保留地图与悬浮玻璃控件 —— */
+.desktop{padding:0!important;background:#06070b!important}
+.app-window{
+  width:100%!important;height:100%!important;max-width:none!important;
+  border-radius:0!important;background:transparent!important;box-shadow:none!important}
+.topbar{
+  position:absolute!important;inset:0 0 auto 0!important;height:0!important;min-height:0!important;
+  padding:0!important;background:transparent!important;box-shadow:none!important;
+  pointer-events:none;z-index:90}
+.brand,.document-state,.top-actions .avatar{display:none!important}
+.top-actions{position:static!important;pointer-events:none}
+.top-actions button{pointer-events:auto}
+.top-actions .text-button:nth-of-type(1){
+  display:block!important;position:fixed;left:24px;top:24px;width:44px;height:44px;
+  padding:0;border-radius:50%;font-size:0;color:white;
+  background:linear-gradient(145deg,rgba(255,255,255,.14),rgba(12,14,22,.44))!important;
+  border:1px solid rgba(255,255,255,.24);
+  box-shadow:inset 0 1px rgba(255,255,255,.34),0 14px 36px rgba(0,0,0,.38)}
+.top-actions .text-button:nth-of-type(1):before{
+  content:"";position:absolute;left:17px;top:16px;width:9px;height:9px;
+  border-left:1.8px solid white;border-bottom:1.8px solid white;transform:rotate(45deg)}
+.top-actions .text-button:nth-of-type(2){
+  display:block!important;position:fixed;right:24px;top:24px;width:44px;height:44px;
+  padding:0;border-radius:50%;font-size:0;
+  background:linear-gradient(145deg,rgba(255,255,255,.13),rgba(12,14,22,.46))!important;
+  border:1px solid rgba(255,255,255,.22);
+  box-shadow:inset 0 1px rgba(255,255,255,.30),0 14px 36px rgba(0,0,0,.36)}
+.top-actions .text-button:nth-of-type(2):before{
+  content:"";position:absolute;left:13px;top:12px;width:12px;height:12px;
+  border:1.8px solid white;border-radius:50%}
+.top-actions .text-button:nth-of-type(2):after{
+  content:"";position:absolute;left:26px;top:26px;width:8px;height:1.8px;
+  border-radius:2px;background:white;transform:rotate(45deg);transform-origin:left center}
+.top-actions:has(.edit-map-button) .text-button:nth-of-type(2){right:154px}
+.top-actions .text-button:nth-of-type(3){display:none!important}
+.edit-map-button{
+  display:block!important;position:fixed;right:24px;top:24px;height:44px;
+  margin:0;padding:0 18px;border-radius:22px;
+  color:#fff!important;background:linear-gradient(135deg,rgba(116,77,210,.42),rgba(32,173,137,.24))!important;
+  border:1px solid rgba(255,255,255,.25);
+  box-shadow:inset 0 1px rgba(255,255,255,.34),0 14px 36px rgba(0,0,0,.38)!important}
+.workspace{width:100%;height:100%;background:transparent!important}
+.rail{
+  position:fixed!important;left:50%!important;top:24px!important;transform:translateX(-50%);
+  width:auto!important;height:44px!important;min-width:0!important;flex:0 0 auto!important;
+  padding:4px!important;border-radius:22px!important;overflow:visible!important;
+  background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(12,14,22,.48))!important;
+  border:1px solid rgba(255,255,255,.20);
+  box-shadow:inset 0 1px rgba(255,255,255,.28),0 14px 38px rgba(0,0,0,.36)!important;
+  z-index:88}
+.rail>div:first-child{display:flex;align-items:center;gap:3px}
+.rail-label,.rail-bottom{display:none!important}
+.rail-item{
+  width:auto!important;height:34px!important;padding:0 14px!important;border-radius:17px!important;
+  color:rgba(255,255,255,.62)!important;white-space:nowrap}
+.rail-item.active{
+  background:rgba(255,255,255,.14)!important;color:#fff!important;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)!important}
+.rail-glyph{display:none!important}
+.map-wrap{width:100%;height:100%;background:#315f7a!important}
+.map-title{display:none!important}
+.legend,.legend-reopen,.zoom-control,.reopen-card,.detail-panel,.mode-notice{
+  color:var(--ink);
+  background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(14,16,23,.58))!important;
+  -webkit-backdrop-filter:blur(24px) saturate(1.2);backdrop-filter:blur(24px) saturate(1.2);
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow:inset 0 1px rgba(255,255,255,.22),0 18px 46px rgba(0,0,0,.38)!important}
+.detail-panel{
+  position:fixed!important;top:84px;right:84px;height:calc(100% - 168px);
+  border-radius:22px;overflow:hidden;
+  background:rgba(10,12,18,.58)!important;
+  -webkit-backdrop-filter:blur(18px) saturate(1.12);backdrop-filter:blur(18px) saturate(1.12)}
+.panel-header,.card-footer{background:rgba(14,16,23,.46)!important}
+.card-scroll{background:transparent!important;padding-bottom:64px}
+.card-copy blockquote{background:rgba(112,78,190,.16);color:#d5c4ff}
+.links-section>button{color:var(--ink)}
+.links-section>button:hover{background:rgba(255,255,255,.07)}
+.zoom-control{right:92px;bottom:24px}.legend,.legend-reopen{left:240px;bottom:24px}.scale-bar{left:176px!important;bottom:24px!important}
+.reopen-card{display:none!important}
+.editor-shell .back-button{position:fixed!important;left:24px;top:26px;z-index:120}
+.editor-shell .editor-title{padding:0}
+.card-copy blockquote:empty{display:none}
+.tool-explain,.layers-panel{display:none!important}
+.layers-toggle{
+  right:24px!important;top:24px!important;height:44px!important;padding:0 18px!important;
+  border-radius:20px!important;color:#fff!important;
+  background:linear-gradient(135deg,rgba(94,77,196,.48),rgba(28,164,133,.30))!important;
+  border:1px solid rgba(255,255,255,.24)!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.30),0 14px 36px rgba(0,0,0,.36)!important}
+.tool-dock .pending-dot{width:10px;height:10px;border-radius:50%;box-shadow:0 0 12px currentColor}
+@media(max-width:760px){.legend,.legend-reopen,.scale-bar{left:18px!important;bottom:92px!important}.zoom-control{right:82px;bottom:24px}}
+.mode-notice{top:82px;color:#fff}
+.map-search-panel{
+  position:fixed;right:24px;top:78px;z-index:110;width:min(360px,calc(100vw - 48px));
+  padding:10px;border-radius:20px;
+  background:linear-gradient(145deg,rgba(255,255,255,.14),rgba(12,14,22,.72));
+  -webkit-backdrop-filter:blur(28px) saturate(1.25);backdrop-filter:blur(28px) saturate(1.25);
+  border:1px solid rgba(255,255,255,.22);
+  box-shadow:inset 0 1px rgba(255,255,255,.30),0 24px 60px rgba(0,0,0,.48);
+  animation:atlasEditorArrive .28s cubic-bezier(.16,1,.3,1) both}
+.map-search-panel input{
+  width:100%;height:42px;border:0;outline:0;border-radius:13px;padding:0 14px;
+  color:#fff;background:rgba(255,255,255,.08);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.13);font:12px inherit}
+.map-search-panel input::placeholder{color:rgba(255,255,255,.42)}
+.map-search-panel>div{max-height:330px;overflow:auto;padding-top:6px}
+.map-search-panel>div button{
+  width:100%;min-height:48px;border:0;border-radius:12px;padding:7px 10px;
+  display:grid;grid-template-columns:8px 1fr;align-items:center;gap:10px;text-align:left;
+  color:#fff;background:transparent;cursor:pointer}
+.map-search-panel>div button:hover{background:rgba(255,255,255,.09)}
+.map-search-panel>div i{width:8px;height:8px;border-radius:50%}
+.map-search-panel>div b{display:block;font-size:11px}.map-search-panel>div small{display:block;margin-top:3px;color:rgba(255,255,255,.45);font-size:9px}
 #root{width:100%;height:100%}
 </style></head><body><div id="root"></div><script>
 "use strict";
@@ -22446,15 +22628,12 @@ input[type=range]{accent-color:#f4f4f6}
   var GX = 800;
   var GY = 520;
   var DEFAULT_CATEGORIES = [
-    { name: "\u5730\u70B9", color: "#5c806d" },
-    { name: "NPC", color: "#a55440" },
-    { name: "\u9635\u8425", color: "#9e7919" },
-    { name: "\u7EC4\u7EC7", color: "#546991" },
-    { name: "\u751F\u7269", color: "#765f94" },
-    { name: "\u6280\u672F", color: "#3f7f89" },
-    { name: "\u751F\u6D3B\u65B9\u5F0F", color: "#b06f4a" },
-    { name: "\u7269\u54C1", color: "#687f52" },
-    { name: "\u81EA\u5B9A\u4E49\u7C7B\u522B", color: "#77746e" }
+    { name: "\u5730\u70B9", color: "#59C3A5" },
+    { name: "\u89D2\u8272", color: "#F08A72" },
+    { name: "\u7EC4\u7EC7", color: "#7DA7FF" },
+    { name: "\u7269\u4EF6", color: "#E5B95C" },
+    { name: "\u4F5C\u54C1", color: "#C58BFA" },
+    { name: "\u4FBF\u7B7E", color: "#AEB6C4" }
   ];
   var DEFAULT_RELATION_CATEGORIES = [
     { name: "\u5B58\u5728", color: "#8a6f91" },
@@ -22509,7 +22688,7 @@ input[type=range]{accent-color:#f4f4f6}
     return `rgb(${mix(16)},${mix(8)},${mix(0)})`;
   }
   function paintedColor(v) {
-    const stops = v <= 0 ? [[-0.35, "#315f7a"], [-0.18, "#4f86a0"], [-0.08, "#77aabd"], [0, "#a9d2d2"]] : [[0, "#78aa72"], [0.28, "#96bd72"], [0.48, "#d0b566"], [0.68, "#c78655"], [0.84, "#8d705f"], [1, "#f2f4f3"]];
+    const stops = v <= 0 ? [[-0.35, "#173b52"], [-0.18, "#245675"], [-0.08, "#315f7a"], [0, "#315f7a"]] : [[0, "#78aa72"], [0.28, "#96bd72"], [0.48, "#d0b566"], [0.68, "#c78655"], [0.84, "#8d705f"], [1, "#f2f4f3"]];
     for (let i = 1; i < stops.length; i++) if (v <= stops[i][0]) return mixColor(stops[i - 1][1], stops[i][1], clamp((v - stops[i - 1][0]) / (stops[i][0] - stops[i - 1][0]), 0, 1));
     return stops[stops.length - 1][1];
   }
@@ -22592,9 +22771,16 @@ input[type=range]{accent-color:#f4f4f6}
       const p = { x: (x + 0.5) / nx * W, y: (y + 0.5) / ny * H }, base = sampleHeight(height, p);
       const gx = Math.min(GX - 1, Math.floor(p.x / W * GX)), gy = Math.min(GY - 1, Math.floor(p.y / H * GY)), index = gy * GX + gx, proximity = influence[index], landOwner = owner[index];
       let boundary = landOwner < 0;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const xx = gx + dx, yy = gy + dy;
-        if (xx >= 0 && xx < GX && yy >= 0 && yy < GY && owner[yy * GX + xx] >= 0 && owner[yy * GX + xx] !== landOwner) boundary = true;
+      // 在不同陆块的 Voronoi 分界处保留明确海峡。三格安全带可以抵消
+      // 噪声与等值线平滑造成的“隔海搭桥”，又不会侵蚀同一陆块的细湾。
+      for (let oy = -3; oy <= 3 && !boundary; oy++) for (let ox = -3; ox <= 3; ox++) {
+        const xx = gx + ox, yy = gy + oy;
+        if (xx < 0 || xx >= GX || yy < 0 || yy >= GY) continue;
+        const nearbyOwner = owner[yy * GX + xx];
+        if (nearbyOwner >= 0 && landOwner >= 0 && nearbyOwner !== landOwner) {
+          boundary = true;
+          break;
+        }
       }
       if (proximity === 0 || boundary) {
         values[y * nx + x] = -1e-3;
@@ -22682,6 +22868,9 @@ input[type=range]{accent-color:#f4f4f6}
     const coastRef = (0, import_react.useRef)(initialMap ? initialMap.coasts.map((path) => path.map((p) => ({ ...p }))) : []);
     const annotationsRef = (0, import_react.useRef)(initialMap ? initialMap.annotations.map((a) => ({ ...a, points: a.points.map((p) => ({ ...p })) })).filter((a) => a.kind !== "line" || a.sourceId && a.targetId) : []);
     const camera = (0, import_react.useRef)({ x: 500, y: 325, zoom: 1 });
+    const zoomLimits = (0, import_react.useRef)({ min: 0.65, max: 1.55 });
+    const cameraInitialized = (0, import_react.useRef)(false);
+    const pendingPlacement = (0, import_react.useRef)(null);
     const pointer = (0, import_react.useRef)({ down: false, x: 0, y: 0, lastX: 0, lastY: 0, painted: false });
     const activePath = (0, import_react.useRef)([]);
     const riverEnded = (0, import_react.useRef)(false);
@@ -22697,6 +22886,8 @@ input[type=range]{accent-color:#f4f4f6}
     const [strength, setStrength] = (0, import_react.useState)(42);
     const strengthRef = (0, import_react.useRef)(42);
     const [worldKm, setWorldKm] = (0, import_react.useState)(initialMap?.worldKm ?? 3600);
+    const [editorZoom, setEditorZoom] = (0, import_react.useState)(1);
+    const [pendingPlacements, setPendingPlacements] = (0, import_react.useState)(() => window.ATLAS_CANVAS_PENDING ?? []);
     const [setup, setSetup] = (0, import_react.useState)(!initialMap);
     const [heightOpacity, setHeightOpacity] = (0, import_react.useState)(100);
     const heightOpacityRef = (0, import_react.useRef)(100);
@@ -22710,8 +22901,7 @@ input[type=range]{accent-color:#f4f4f6}
     const [saveDialog, setSaveDialog] = (0, import_react.useState)(false);
     const [coastRoughness, setCoastRoughness] = (0, import_react.useState)(initialMap?.coastRoughness ?? 55);
     const [categories, setCategories] = (0, import_react.useState)(() => {
-      const source = initialMap?.categories ?? DEFAULT_CATEGORIES;
-      return [...source.filter((category) => category.name !== "\u5176\u4ED6" && category.name !== "\u81EA\u5B9A\u4E49\u7C7B\u522B"), { name: "\u81EA\u5B9A\u4E49\u7C7B\u522B", color: "#77746e" }];
+      return DEFAULT_CATEGORIES;
     });
     const [relationCategories, setRelationCategories] = (0, import_react.useState)(() => {
       const source = initialMap?.relationCategories ?? DEFAULT_RELATION_CATEGORIES;
@@ -22762,6 +22952,35 @@ input[type=range]{accent-color:#f4f4f6}
     (0, import_react.useEffect)(() => {
       rebuildTerrainCache(2);
     }, [revision]);
+    function clampEditorCamera(c, rect) {
+      const halfWidth = rect.width / (2 * c.zoom);
+      const halfHeight = rect.height / (2 * c.zoom);
+      c.x = halfWidth >= W / 2 ? W / 2 : clamp(c.x, halfWidth, W - halfWidth);
+      c.y = halfHeight >= H / 2 ? H / 2 : clamp(c.y, halfHeight, H - halfHeight);
+    }
+    (0, import_react.useEffect)(() => {
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      const fit = () => {
+        const rect = wrap.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const fitZoom = Math.max(0.1, Math.min((rect.width - 48) / W, (rect.height - 48) / H));
+        zoomLimits.current = { min: fitZoom, max: Math.max(fitZoom * 4, fitZoom + 0.6) };
+        const c = camera.current;
+        if (!cameraInitialized.current) {
+          c.x = W / 2;
+          c.y = H / 2;
+          c.zoom = fitZoom;
+          cameraInitialized.current = true;
+        } else c.zoom = clamp(c.zoom, zoomLimits.current.min, zoomLimits.current.max);
+        clampEditorCamera(c, rect);
+        setEditorZoom(c.zoom);
+      };
+      fit();
+      const observer = new ResizeObserver(fit);
+      observer.observe(wrap);
+      return () => observer.disconnect();
+    }, []);
     (0, import_react.useEffect)(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -22770,11 +22989,13 @@ input[type=range]{accent-color:#f4f4f6}
         const rect = canvas.getBoundingClientRect(), c = camera.current;
         const beforeX = c.x + (event.clientX - rect.left - rect.width / 2) / c.zoom;
         const beforeY = c.y + (event.clientY - rect.top - rect.height / 2) / c.zoom;
-        const next = Math.max(0.65, Math.min(1.55, c.zoom * Math.exp(-event.deltaY * 15e-4)));
+        const next = clamp(c.zoom * Math.exp(-event.deltaY * 15e-4), zoomLimits.current.min, zoomLimits.current.max);
         if (!Number.isFinite(next)) return;
         c.zoom = next;
         c.x = beforeX - (event.clientX - rect.left - rect.width / 2) / next;
         c.y = beforeY - (event.clientY - rect.top - rect.height / 2) / next;
+        clampEditorCamera(c, rect);
+        setEditorZoom(next);
       };
       canvas.addEventListener("wheel", onWheel, { passive: false });
       return () => canvas.removeEventListener("wheel", onWheel);
@@ -22871,19 +23092,31 @@ input[type=range]{accent-color:#f4f4f6}
     }
     function assistedRiverPoint(p) {
       if (!riverAssistRef.current) return p;
-      const gx = Math.max(2, Math.min(GX - 3, Math.floor(p.x / W * GX)));
-      const gy = Math.max(2, Math.min(GY - 3, Math.floor(p.y / H * GY)));
-      let bx = gx, by = gy, bv = heightRef.current[gy * GX + gx];
-      for (let y = gy - 2; y <= gy + 2; y++) for (let x = gx - 2; x <= gx + 2; x++) {
+      const radius = 9;
+      const gx = Math.max(radius, Math.min(GX - radius - 1, Math.floor(p.x / W * GX)));
+      const gy = Math.max(radius, Math.min(GY - radius - 1, Math.floor(p.y / H * GY)));
+      const originHeight = heightRef.current[gy * GX + gx];
+      let bx = gx, by = gy, bestScore = originHeight;
+      for (let y = gy - radius; y <= gy + radius; y++) for (let x = gx - radius; x <= gx + radius; x++) {
+        const distance = Math.hypot(x - gx, y - gy);
+        if (distance > radius) continue;
         const v = heightRef.current[y * GX + x];
-        if (v < bv) {
-          bv = v;
+        const score = v + distance * 0.0007;
+        if (score < bestScore) {
+          bestScore = score;
           bx = x;
           by = y;
         }
       }
       const low = { x: (bx + 0.5) * W / GX, y: (by + 0.5) * H / GY };
-      const assisted = { x: p.x * 0.55 + low.x * 0.45, y: p.y * 0.55 + low.y * 0.45 };
+      let assisted = { x: p.x * 0.26 + low.x * 0.74, y: p.y * 0.26 + low.y * 0.74 };
+      const previous = activePath.current[activePath.current.length - 1];
+      if (previous) {
+        assisted = {
+          x: previous.x + (assisted.x - previous.x) * 0.72,
+          y: previous.y + (assisted.y - previous.y) * 0.72
+        };
+      }
       return onLand(assisted) ? assisted : p;
     }
     (0, import_react.useEffect)(() => {
@@ -22899,9 +23132,10 @@ input[type=range]{accent-color:#f4f4f6}
             canvas.style.height = `${rect.height}px`;
           }
           const ctx = canvas.getContext("2d"), c = camera.current;
+          clampEditorCamera(c, rect);
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           ctx.clearRect(0, 0, rect.width, rect.height);
-          ctx.fillStyle = "#dfe4e2";
+          ctx.fillStyle = "#315f7a";
           ctx.fillRect(0, 0, rect.width, rect.height);
           ctx.save();
           ctx.translate(rect.width / 2, rect.height / 2);
@@ -22913,6 +23147,19 @@ input[type=range]{accent-color:#f4f4f6}
           ctx.imageSmoothingQuality = "high";
           if (terrainCacheRef.current) ctx.drawImage(terrainCacheRef.current, 0, 0, W, H);
           ctx.globalAlpha = 1;
+          coastRef.current.forEach((path) => {
+            if (path.length < 2) return;
+            ctx.beginPath();
+            path.forEach((p, index) => index ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+            ctx.strokeStyle = "rgba(224,241,224,.82)";
+            ctx.lineWidth = 3.4 / c.zoom;
+            ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+            ctx.stroke();
+            ctx.strokeStyle = "rgba(42,72,62,.92)";
+            ctx.lineWidth = 1.65 / c.zoom;
+            ctx.stroke();
+          });
           const hoveredConnectionPoint = toolRef.current === "line" && Number.isFinite(pointer.current.x) && Number.isFinite(pointer.current.y) ? pointAt(mapPoint(pointer.current.x, pointer.current.y)) : void 0;
           annotationsRef.current.forEach((a) => {
             if (a.wikiOnly) return;
@@ -23080,15 +23327,25 @@ input[type=range]{accent-color:#f4f4f6}
         setRevision((v) => v + 1);
       }
       if (t === "area" && activePath.current.length > 3) {
-        const id = `area-${Date.now()}`, points = smartClose([...activePath.current], Math.max(22, brushRef.current * 0.55));
-        annotationsRef.current.push({ id, kind: "area", points, title: "", category: "\u6D3B\u52A8", description: "", color: "#9e7919" });
+        const pending = pendingPlacement.current;
+        const id = pending?.id ?? `area-${Date.now()}`, points = smartClose([...activePath.current], Math.max(22, brushRef.current * 0.55));
+        annotationsRef.current.push({ id, kind: "area", points, title: pending?.name ?? "", category: pending?.category ?? "\u8303\u56F4\u5F71\u54CD", description: "", color: pending?.color ?? "#FF8F5C" });
+        if (pending) {
+          setPendingPlacements((items) => items.filter((item) => item.id !== pending.id));
+          pendingPlacement.current = null;
+        }
         activePath.current = [];
         setSelected(id);
         setRevision((v) => v + 1);
       }
       if (t === "point") {
-        const id = `point-${Date.now()}`;
-        annotationsRef.current.push({ id, kind: "point", points: [p], title: "", category: "\u5730\u70B9", description: "", color: "#5c806d" });
+        const pending = pendingPlacement.current;
+        const id = pending?.id ?? `point-${Date.now()}`;
+        annotationsRef.current.push({ id, kind: "point", points: [p], title: pending?.name ?? "", category: pending?.category ?? "\u5730\u70B9", description: "", color: pending?.color ?? "#59C3A5" });
+        if (pending) {
+          setPendingPlacements((items) => items.filter((item) => item.id !== pending.id));
+          pendingPlacement.current = null;
+        }
         setSelected(id);
         setRevision((v) => v + 1);
       }
@@ -23202,7 +23459,8 @@ input[type=range]{accent-color:#f4f4f6}
     const toolGroups = [
       { label: "\u5BFC\u822A", items: [{ id: "pan", name: "\u79FB\u52A8" }] },
       { label: "\u5730\u5F62", items: [{ id: "raise", name: "\u62AC\u5347" }, { id: "lower", name: "\u4E0B\u538B" }, { id: "seaLevel", name: "\u6D77\u5E73\u9762" }, { id: "smooth", name: "\u5E73\u6ED1" }, { id: "flatten", name: "\u538B\u5E73" }, { id: "river", name: "\u6CB3\u6D41\u7ED8\u5236" }] },
-      { label: "\u4E16\u754C\u5185\u5BB9", items: [{ id: "point", name: "\u8BBE\u5B9A\u70B9" }, { id: "line", name: "\u5173\u8054\u7EBF" }, { id: "area", name: "\u6D3B\u52A8\u9762" }, { id: "moveItem", name: "\u79FB\u52A8\u5185\u5BB9" }, { id: "deleteItem", name: "\u5220\u9664\u5185\u5BB9" }] }
+      { label: "\u4E16\u754C\u5185\u5BB9", items: [{ id: "point", name: "\u8BBE\u5B9A\u70B9" }, { id: "line", name: "\u5173\u8054\u7EBF" }, { id: "area", name: "\u8303\u56F4\u5F71\u54CD" }, { id: "moveItem", name: "\u79FB\u52A8\u5185\u5BB9" }, { id: "deleteItem", name: "\u5220\u9664\u5185\u5BB9" }] },
+      ...(pendingPlacements.length ? [{ label: "\u5F85\u5B9A\u4F4D\u5230\u5730\u56FE", items: pendingPlacements.map((item) => ({ id: `pending-${item.id}`, name: item.name, pending: item })) }] : [])
     ];
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "editor-shell", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "editor-top", children: [
@@ -23225,11 +23483,17 @@ input[type=range]{accent-color:#f4f4f6}
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "editor-body", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("aside", { className: "tool-dock", children: toolGroups.map((group) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: group.label }),
-          group.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { className: tool === item.id ? "active" : "", onClick: () => {
+          group.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { className: tool === item.id || item.pending && pendingPlacement.current?.id === item.pending.id ? "active" : "", onClick: () => {
             lineStart.current = null;
-            setTool(item.id);
+            if (item.pending) {
+              pendingPlacement.current = item.pending;
+              setTool(item.pending.placement === "\u8303\u56F4\u5F71\u54CD" ? "area" : "point");
+            } else {
+              pendingPlacement.current = null;
+              setTool(item.id);
+            }
           }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("i", { className: `tool-icon tool-${item.id}` }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("i", { className: item.pending ? "pending-dot" : `tool-icon tool-${item.id}`, style: item.pending ? { background: item.pending.color, color: item.pending.color } : void 0 }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.name })
           ] }, item.id))
         ] }, group.label)) }),
@@ -23264,7 +23528,7 @@ input[type=range]{accent-color:#f4f4f6}
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "scale-bar", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 80 } }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("b", { children: [
-              Math.round(worldKm / 10),
+              Math.max(1, Math.round(worldKm / W * 80 / editorZoom)),
               " km"
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("small", { children: [
@@ -23273,8 +23537,8 @@ input[type=range]{accent-color:#f4f4f6}
               " km"
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "layers-toggle", onClick: () => setLayersOpen((v) => !v), children: "\u56FE\u5C42" }),
-          layersOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", { className: "layers-panel", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "layers-toggle", onClick: () => setSaveDialog(true), children: "\u4FDD\u5B58\u5730\u56FE" }),
+          false && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", { className: "layers-panel", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "\u5730\u56FE\u56FE\u5C42" }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setLayersOpen(false) })
@@ -23291,17 +23555,17 @@ input[type=range]{accent-color:#f4f4f6}
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("i", { style: { background: cardDraft.color } }),
-                cardDraft.kind === "point" ? "\u8BBE\u5B9A\u70B9" : cardDraft.kind === "area" ? "\u6D3B\u52A8\u9762" : cardDraft.kind === "river" ? "\u6CB3\u6D41" : "\u5173\u8054\u7EBF"
+                cardDraft.kind === "point" ? "\u8BBE\u5B9A\u70B9" : cardDraft.kind === "area" ? "\u8303\u56F4\u5F71\u54CD" : cardDraft.kind === "river" ? "\u6CB3\u6D41" : "\u5173\u8054\u7EBF"
               ] }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setSelected(null) })
             ] }),
             !(cardDraft.kind === "line" && cardDraft.category === "\u5B58\u5728") && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
               "\u540D\u79F0",
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { placeholder: cardDraft.kind === "point" ? "\u672A\u547D\u540D\u8BBE\u5B9A\u70B9" : cardDraft.kind === "area" ? "\u672A\u547D\u540D\u6D3B\u52A8" : cardDraft.kind === "line" ? "\u672A\u547D\u540D\u540D\u79F0" : "\u672A\u547D\u540D\u6CB3\u6D41", value: cardDraft.title, onChange: (e) => setCardDraft((draft) => draft ? { ...draft, title: e.target.value } : draft) })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { placeholder: cardDraft.kind === "point" ? "\u672A\u547D\u540D\u8BBE\u5B9A\u70B9" : cardDraft.kind === "area" ? "\u672A\u547D\u540D\u8303\u56F4\u5F71\u54CD" : cardDraft.kind === "line" ? "\u672A\u547D\u540D\u540D\u79F0" : "\u672A\u547D\u540D\u6CB3\u6D41", value: cardDraft.title, onChange: (e) => setCardDraft((draft) => draft ? { ...draft, title: e.target.value } : draft) })
             ] }),
             cardDraft.kind === "point" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
               "\u7C7B\u522B",
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "category-select-row single", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { value: categories.some((category) => category.name === cardDraft.category) ? cardDraft.category : "\u81EA\u5B9A\u4E49\u7C7B\u522B", onChange: (e) => chooseCategory(e.target.value), children: categories.map((category) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: category.name, children: category.name }, category.name)) }) })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "category-select-row single", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { value: categories.some((category) => category.name === cardDraft.category) ? cardDraft.category : "\u4FBF\u7B7E", onChange: (e) => chooseCategory(e.target.value), children: categories.map((category) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: category.name, children: category.name }, category.name)) }) })
             ] }) : cardDraft.kind === "line" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
               "\u5173\u8054\u7C7B\u522B",
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "category-select-row single", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { value: relationCategories.some((category) => category.name === cardDraft.category) ? cardDraft.category : "\u81EA\u5B9A\u4E49\u5173\u8054", onChange: (e) => chooseCategory(e.target.value), children: relationCategories.map((category) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: category.name, children: category.name }, category.name)) }) })
@@ -23309,7 +23573,7 @@ input[type=range]{accent-color:#f4f4f6}
               "\u7C7B\u578B",
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { value: cardDraft.category, onChange: (e) => setCardDraft((draft) => draft ? { ...draft, category: e.target.value } : draft) })
             ] }),
-            (cardDraft.kind === "point" && !categories.some((category) => category.name === cardDraft.category) || cardDraft.kind === "line" && !relationCategories.some((category) => category.name === cardDraft.category)) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
+            cardDraft.kind === "line" && !relationCategories.some((category) => category.name === cardDraft.category) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
               cardDraft.kind === "line" ? "\u5173\u8054\u540D\u79F0" : "\u7C7B\u522B\u540D\u79F0",
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { placeholder: "\u7559\u7A7A\u5219\u663E\u793A\u4E3A\u201C\u5176\u4ED6\u201D", value: customCategoryName, onChange: (e) => {
                 setCustomCategoryName(e.target.value);
@@ -23517,7 +23781,7 @@ input[type=range]{accent-color:#f4f4f6}
     return `rgb(${mix(16)},${mix(8)},${mix(0)})`;
   }
   function paintedTerrain(v) {
-    const stops = v <= 0 ? [[-0.35, "#315f7a"], [-0.18, "#4f86a0"], [-0.08, "#77aabd"], [0, "#a9d2d2"]] : [[0, "#78aa72"], [0.28, "#96bd72"], [0.48, "#d0b566"], [0.68, "#c78655"], [0.84, "#8d705f"], [1, "#f2f4f3"]];
+    const stops = v <= 0 ? [[-0.35, "#173b52"], [-0.18, "#245675"], [-0.08, "#315f7a"], [0, "#315f7a"]] : [[0, "#78aa72"], [0.28, "#96bd72"], [0.48, "#d0b566"], [0.68, "#c78655"], [0.84, "#8d705f"], [1, "#f2f4f3"]];
     for (let i = 1; i < stops.length; i++) if (v <= stops[i][0]) return blend(stops[i - 1][1], stops[i][1], clamp2((v - stops[i - 1][0]) / (stops[i][0] - stops[i - 1][0]), 0, 1));
     return stops[stops.length - 1][1];
   }
@@ -23553,13 +23817,13 @@ input[type=range]{accent-color:#f4f4f6}
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = savedMap ? "#bdcbc6" : "#e7e2d6";
+    ctx.fillStyle = "#315f7a";
     ctx.fillRect(0, 0, w, h);
     ctx.save();
     ctx.translate(w / 2, h / 2);
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-camera.x, -camera.y);
-    ctx.fillStyle = savedMap ? "#bdcbc6" : "#e7e2d6";
+    ctx.fillStyle = "#315f7a";
     ctx.fillRect(-5e3, -5e3, MAP_W + 1e4, MAP_H + 1e4);
     ctx.strokeStyle = "rgba(92,91,90,.075)";
     ctx.lineWidth = 1 / camera.zoom;
@@ -23602,15 +23866,15 @@ input[type=range]{accent-color:#f4f4f6}
       savedMap.coasts.forEach((path) => {
         ctx.beginPath();
         coastPath(ctx, path);
-        ctx.strokeStyle = "rgba(91,119,121,.72)";
-        ctx.lineWidth = 2.7 / camera.zoom;
+        ctx.strokeStyle = "rgba(224,241,224,.82)";
+        ctx.lineWidth = 3.4 / camera.zoom;
         ctx.lineJoin = "round";
         ctx.lineCap = "round";
         ctx.stroke();
         ctx.beginPath();
         coastPath(ctx, path);
-        ctx.strokeStyle = (savedMap.coastRoughness ?? 50) > 58 ? "rgba(55,76,59,.82)" : "rgba(81,76,57,.78)";
-        ctx.lineWidth = 1.15 / camera.zoom;
+        ctx.strokeStyle = (savedMap.coastRoughness ?? 50) > 58 ? "rgba(36,67,56,.95)" : "rgba(48,74,61,.94)";
+        ctx.lineWidth = 1.65 / camera.zoom;
         ctx.stroke();
       });
       savedMap.annotations.forEach((a) => {
@@ -24070,6 +24334,8 @@ input[type=range]{accent-color:#f4f4f6}
     const canEdit = window.ATLAS_CAN_EDIT !== false;
     const [editorMode, setEditorMode] = (0, import_react2.useState)(window.ATLAS_MODE === "create" || window.ATLAS_MODE === "edit");
     const [libraryView, setLibraryView] = (0, import_react2.useState)("map");
+    const [searchOpen, setSearchOpen] = (0, import_react2.useState)(false);
+    const [searchQuery, setSearchQuery] = (0, import_react2.useState)("");
     const [assets, setAssets] = (0, import_react2.useState)([]);
     const [savedMap, setSavedMap] = (0, import_react2.useState)(() => window.ATLAS_INITIAL_MAP ?? emptyMap());
     const [hasCreatedMap, setHasCreatedMap] = (0, import_react2.useState)(Boolean(window.ATLAS_INITIAL_MAP));
@@ -24090,7 +24356,7 @@ input[type=range]{accent-color:#f4f4f6}
           return point ? [{ id: point.id, label: point.title || "\u672A\u547D\u540D\u8BBE\u5B9A\u70B9", meta: point.category }] : [];
         });
       }
-      return { id: annotation.id, name: annotation.title || { point: "\u672A\u547D\u540D\u8BBE\u5B9A\u70B9", line: "\u672A\u547D\u540D\u5173\u8054", area: "\u672A\u547D\u540D\u6D3B\u52A8", river: "\u672A\u547D\u540D\u6CB3\u6D41" }[annotation.kind], type: annotation.category, x: center.x, y: center.y, color: annotation.color, tint: "#eceae4", zoom: annotation.kind === "area" ? 1.45 : 2.1, kicker: annotation.kind === "point" ? "\u8BBE\u5B9A\u70B9" : annotation.kind === "line" ? "\u5173\u8054" : annotation.kind === "area" ? "\u6D3B\u52A8\u9762" : "\u6CB3\u6D41", description: annotation.description || "\u5C1A\u672A\u586B\u5199\u8BE6\u7EC6\u4ECB\u7ECD\u3002", note: "\u8FD9\u662F\u8FD9\u4E2A\u4E16\u754C\u6301\u7EED\u751F\u957F\u540E\u7559\u4E0B\u7684\u4E00\u4EFD\u6863\u6848\u3002", links };
+      return { id: annotation.id, name: annotation.title || { point: "\u672A\u547D\u540D\u8BBE\u5B9A\u70B9", line: "\u672A\u547D\u540D\u5173\u8054", area: "\u672A\u547D\u540D\u8303\u56F4\u5F71\u54CD", river: "\u672A\u547D\u540D\u6CB3\u6D41" }[annotation.kind], type: annotation.category, x: center.x, y: center.y, color: annotation.color, tint: "#eceae4", zoom: annotation.kind === "area" ? 1.45 : 2.1, kicker: annotation.kind === "point" ? "\u8BBE\u5B9A\u70B9" : annotation.kind === "line" ? "\u5173\u8054" : annotation.kind === "area" ? "\u8303\u56F4\u5F71\u54CD" : "\u6CB3\u6D41", description: annotation.description || "\u5C1A\u672A\u586B\u5199\u8BE6\u7EC6\u4ECB\u7ECD\u3002", note: "", links };
     }, [savedMap]);
     const selectedAnnotation = savedMap.annotations.find((item) => item.id === selected);
     const entry = selectedAnnotation ? annotationEntry(selectedAnnotation) : null;
@@ -24345,11 +24611,27 @@ input[type=range]{accent-color:#f4f4f6}
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "top-actions", children: [
           /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "text-button", onClick: () => atlasBridge({ type: "exit" }), children: "\u8FD4\u56DE\u4F01\u5212" }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "text-button", children: "\u641C\u7D22" }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "text-button", onClick: () => setSearchOpen((value) => !value), children: "\u641C\u7D22" }),
           /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "text-button", children: "\u4E16\u754C\u6863\u6848" }),
           canEdit && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "edit-map-button", onClick: () => setEditorMode(true), children: "\u7F16\u8F91\u5730\u56FE" }),
           /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "avatar", children: "\u9752" })
         ] })
+      ] }),
+      searchOpen && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "map-search-panel", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("input", { autoFocus: true, value: searchQuery, placeholder: "\u641C\u7D22\u8BBE\u5B9A\u3001\u5173\u8054\u6216\u8303\u56F4\u5F71\u54CD\u2026", onChange: (event) => setSearchQuery(event.target.value), onKeyDown: (event) => {
+          if (event.key === "Escape") setSearchOpen(false);
+        } }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { children: savedMap.annotations.filter((item) => !searchQuery.trim() || `${item.title} ${item.category} ${item.description}`.toLowerCase().includes(searchQuery.trim().toLowerCase())).slice(0, 8).map((item) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("button", { onClick: () => {
+          focusEntry(item.id);
+          setSearchOpen(false);
+          setSearchQuery("");
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("i", { style: { background: item.color } }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("b", { children: item.title || "\u672A\u547D\u540D\u6761\u76EE" }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("small", { children: item.category })
+          ] })
+        ] }, item.id)) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "workspace", children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("aside", { className: "rail", children: [
@@ -24361,7 +24643,7 @@ input[type=range]{accent-color:#f4f4f6}
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("button", { className: layers.areas ? "rail-item active" : "rail-item", onClick: () => setLayers((v) => ({ ...v, areas: !v.areas })), children: [
               /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "rail-glyph area-glyph" }),
-              "\u6D3B\u52A8"
+              "\u8303\u56F4\u5F71\u54CD"
             ] })
           ] }) }),
           /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "rail-bottom", children: [
@@ -24425,7 +24707,7 @@ input[type=range]{accent-color:#f4f4f6}
               /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { onClick: () => zoomButton(0.806), "aria-label": "\u7F29\u5C0F", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "minus" }) }),
               /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { onClick: () => animateTo({ x: 500, y: 325, zoom: 0.9 }), "aria-label": "\u91CD\u7F6E\u89C6\u56FE", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "target" }) })
             ] }),
-            layers.areas && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "mode-notice", children: "\u6D3B\u52A8\u67E5\u770B\u4E2D \xB7 \u8BBE\u5B9A\u70B9\u4E0E\u5173\u8054\u6682\u4E0D\u53EF\u9009" })
+            layers.areas && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "mode-notice", children: "\u8303\u56F4\u5F71\u54CD\u67E5\u770B\u4E2D \xB7 \u8BBE\u5B9A\u70B9\u4E0E\u5173\u8054\u6682\u4E0D\u53EF\u9009" })
           ] }),
           entry && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("aside", { className: `detail-panel ${panelOpen ? "open" : ""}`, children: [
             /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("header", { className: "panel-header", children: [

@@ -183,18 +183,13 @@ struct WorldBuilderCanvas: View {
                 ? TimelineLayout.make(events: store.objects.filter { $0.kind == .event })
                 : TimelineLayout()
             ZStack {
-                AtlasCanvasBackground()
+                AtlasCanvasBackground(animated: true)
                     .allowsHitTesting(false)
 
                 // 专门接住空白处点击 → 取消选中（放在卡片下面；点卡片会被卡片先接走）
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture { select(nil) }
-
-                if store.projection == .map && store.showMapBase {
-                    mapBase
-                        .transition(.opacity)
-                }
 
                 if store.projection == .relation {
                     relationLayer(in: proxy.size)
@@ -277,30 +272,6 @@ struct WorldBuilderCanvas: View {
             .onDisappear { stopScrollMonitor(); stopKeyMonitor() }
             .onChange(of: proxy.size) { _, newValue in viewSize = newValue }
         }
-    }
-
-    // 地图底盘（骨架阶段：原生的极淡制图岛形；点“编辑地图”进真编辑器）
-    private var mapBase: some View {
-        Canvas { context, size in
-            guard store.mapMade else { return }
-            let rects = [
-                CGRect(x: size.width * 0.22, y: size.height * 0.24, width: size.width * 0.34, height: size.height * 0.40),
-                CGRect(x: size.width * 0.52, y: size.height * 0.30, width: size.width * 0.30, height: size.height * 0.34)
-            ]
-            for (i, rect) in rects.enumerated() {
-                let path = organicPath(in: rect, phase: CGFloat(i) * 0.8)
-                context.fill(path, with: .color(.white.opacity(0.05)))
-                context.stroke(path, with: .color(.white.opacity(0.14)), lineWidth: 1)
-                for inset in stride(from: CGFloat(16), through: 48, by: 16) {
-                    let r = rect.insetBy(dx: inset, dy: inset * 0.6)
-                    if r.width > 20 {
-                        context.stroke(organicPath(in: r, phase: CGFloat(i) * 0.8 + inset * 0.01),
-                                       with: .color(.white.opacity(0.04)), lineWidth: 0.6)
-                    }
-                }
-            }
-        }
-        .allowsHitTesting(false)
     }
 
     // 关系连线：拟物「悬挂缆绳」。缆绳从卡片边缘接出，在重力方向自然下垂（悬链线）；
@@ -684,11 +655,16 @@ struct WorldBuilderCanvas: View {
     private var topBarTitleGroup: some View {
         HStack(spacing: AtlasSpacing.m) {
             Button { onExit() } label: {
-                Image(systemName: "chevron.left").frame(width: 24, height: 24)
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
+                    .atlasP1Glass(Circle(), interactive: true)
             }
             .buttonStyle(.plain)
             .foregroundStyle(AtlasColor.textPrimary)
-            .atlasP1Glass(Circle(), interactive: true)
+            .contentShape(Circle())
+            .help("退出画布")
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(alignment: .firstTextBaseline, spacing: AtlasSpacing.s) {
@@ -697,16 +673,10 @@ struct WorldBuilderCanvas: View {
                         .foregroundStyle(AtlasColor.textPrimary)
                         .lineLimit(1)
                         .frame(maxWidth: 210, alignment: .leading)
-
-                    if canEdit {
-                        Button { openWorldNameEditor() } label: {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 17, weight: .regular))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(AtlasColor.textSecondary)
-                        .help("编辑企划名称")
-                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    if canEdit { openWorldNameEditor() }
                 }
 
                 Text(canEdit ? (store.saved ? "所有更改已保存" : "正在编辑 · 尚未保存") : "只读浏览")
@@ -720,8 +690,6 @@ struct WorldBuilderCanvas: View {
     private var topBarActions: some View {
         if canEdit {
             HStack(spacing: AtlasSpacing.m) {
-                baseLayerMenu
-
                 Button {
                     store.saved = true
                     model.showToast("世界已保存 · \(store.objects.count) 个对象")
@@ -856,28 +824,6 @@ struct WorldBuilderCanvas: View {
         closeWorldNameEditor()
     }
 
-    // MARK: - 底盘菜单（收进顶栏，不占画布）
-
-    private var baseLayerMenu: some View {
-        Menu {
-            Toggle("显示地图底盘", isOn: $store.showMapBase)
-            Button {
-                showMapEditor = true
-            } label: {
-                Label(store.mapMade ? "编辑地图底盘…" : "绘制地图底盘…", systemImage: "map")
-            }
-        } label: {
-            AtlasButtonLabel(title: "底盘", systemImage: "square.3.layers.3d")
-                .font(AtlasFont.label)
-                .foregroundStyle(AtlasColor.textPrimary)
-                .padding(.horizontal, AtlasSpacing.m)
-                .padding(.vertical, AtlasSpacing.s)
-                .atlasP1Glass(Capsule(), interactive: true)
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-    }
-
     // MARK: - 右侧详情卡
 
     @ViewBuilder
@@ -886,22 +832,24 @@ struct WorldBuilderCanvas: View {
             RelationDetailCard(relation: rbind, store: store) {
                 store.removeLink(rid)
             }
+            .id(rid)
             .frame(width: 300)
             .padding(.trailing, AtlasSpacing.l)
             .padding(.top, 102)
             .padding(.bottom, AtlasSpacing.l)
             .frame(maxHeight: .infinity, alignment: .top)
-            .transition(.move(edge: .trailing).combined(with: .opacity))
+            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .trailing)))
         } else if let id = store.selectedID, let bind = store.binding(for: id) {
             DetailCard(object: bind, store: store) {
                 store.delete(id)
             }
+            .id(id)
             .frame(width: 300)
             .padding(.trailing, AtlasSpacing.l)
             .padding(.top, 102)
             .padding(.bottom, AtlasSpacing.l)
             .frame(maxHeight: .infinity, alignment: .top)
-            .transition(.move(edge: .trailing).combined(with: .opacity))
+            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .trailing)))
         }
     }
 
@@ -912,13 +860,72 @@ struct WorldBuilderCanvas: View {
             assistantFloatingCard
                 .padding(.top, 112)
 
+            unlocatedMapTray
+                .padding(.top, AtlasSpacing.m)
+
             Spacer(minLength: 0)
 
             sessionTray
         }
         .padding(.leading, AtlasSpacing.l)
-        .padding(.bottom, AtlasSpacing.l)
+        .padding(.bottom, 96)
         .frame(maxHeight: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var unlocatedMapTray: some View {
+        let pending = store.unlocatedObjects
+        if canEdit, !pending.isEmpty {
+            VStack(alignment: .leading, spacing: AtlasSpacing.s) {
+                HStack {
+                    Label("待定位到地图", systemImage: "mappin.and.ellipse")
+                        .font(AtlasFont.label)
+                    Spacer()
+                    Text("\(pending.count)")
+                        .font(AtlasFont.monoSmall)
+                        .foregroundStyle(AtlasColor.textSecondary)
+                }
+                ForEach(pending.prefix(4)) { object in
+                    Button {
+                        withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
+                            showMapEditor = true
+                        }
+                    } label: {
+                        HStack(spacing: AtlasSpacing.s) {
+                            Image(systemName: object.kind.symbol)
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(store.displayName(object))
+                                    .lineLimit(1)
+                                Text(store.preferredMapPlacement(for: object).rawValue)
+                                    .font(AtlasFont.caption)
+                                    .foregroundStyle(AtlasColor.textTertiary)
+                            }
+                            Spacer()
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .font(AtlasFont.caption)
+                        .foregroundStyle(AtlasColor.textPrimary)
+                        .padding(.horizontal, AtlasSpacing.s)
+                        .frame(height: 42)
+                        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .atlasP1Glass(RoundedRectangle(cornerRadius: 12, style: .continuous), interactive: true)
+                }
+
+                if pending.count > 4 {
+                    Text("另有 \(pending.count - 4) 张卡片")
+                        .font(AtlasFont.caption)
+                        .foregroundStyle(AtlasColor.textTertiary)
+                }
+            }
+            .padding(AtlasSpacing.m)
+            .frame(width: 260)
+            .atlasP1Glass(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .leading)))
+        }
     }
 
     private var assistantFloatingCard: some View {
@@ -1230,6 +1237,39 @@ struct WorldBuilderCanvas: View {
                 .padding(12)
                 .frame(width: 620, alignment: .leading)
                 .atlasP1Glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay {
+                    if agentIsThinking {
+                        AngularGradient(
+                            colors: [
+                                .clear,
+                                AtlasColor.auroraMint.opacity(0.18),
+                                Color.white.opacity(0.95),
+                                AtlasColor.auroraBlue.opacity(0.56),
+                                AtlasColor.auroraViolet.opacity(0.42),
+                                .clear,
+                                .clear
+                            ],
+                            center: .center
+                        )
+                        .rotationEffect(.degrees(thinkingBorderRotation))
+                        .mask(
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .stroke(lineWidth: 2.2)
+                        )
+                        .allowsHitTesting(false)
+                    }
+                }
+                .shadow(
+                    color: AtlasColor.auroraMint.opacity(
+                        agentIsThinking ? (thinkingGlowExpanded ? 0.22 : 0.06) : 0
+                    ),
+                    radius: thinkingGlowExpanded ? 25 : 8
+                )
+                .scaleEffect(
+                    agentIsThinking && !reduceMotion
+                        ? (thinkingGlowExpanded ? 1.008 : 0.998)
+                        : 1
+                )
                 .animation(.spring(response: 0.36, dampingFraction: 0.9), value: commandLineEstimate)
             }
             .padding(.bottom, AtlasSpacing.l)
@@ -1787,16 +1827,31 @@ struct WorldBuilderCanvas: View {
         if showMapEditor {
             WorldMapCanvasView(
                 mode: store.mapMade ? "manage" : "create",
-                onExit: { withAnimation(.snappy(duration: 0.3)) { showMapEditor = false } },
-                onSave: { _, _ in
+                canEdit: canEdit,
+                initialMapJSON: store.mapJSON,
+                pendingPlacementsJSON: store.pendingMapPlacementsJSON(),
+                onExit: {
+                    withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
+                        showMapEditor = false
+                    }
+                },
+                onSave: { _, mapJSON in
                     // 就地生成海岸线并留在编辑器里让用户看到结果；返回由用户点“返回”触发
-                    store.mapMade = true
-                    store.saved = false
+                    store.synchronizeMap(mapJSON)
                     model.showToast("海岸线已生成 · 点左上返回画布")
                 }
             )
             .ignoresSafeArea()
-            .transition(.opacity)
+            .transition(
+                .asymmetric(
+                    insertion: .opacity.combined(
+                        with: .scale(scale: 0.965, anchor: .center)
+                    ),
+                    removal: .opacity.combined(
+                        with: .scale(scale: 0.982, anchor: .center)
+                    )
+                )
+            )
             .zIndex(10)
         }
     }
@@ -2252,7 +2307,9 @@ struct WorldBuilderCanvas: View {
 
     private func openMapEditor(_ id: String) {
         store.selectedID = id
-        withAnimation(.snappy(duration: 0.3)) { showMapEditor = true }
+        withAnimation(.spring(response: 0.48, dampingFraction: 0.86)) {
+            showMapEditor = true
+        }
     }
 
     private var panGesture: some Gesture {
@@ -2484,7 +2541,18 @@ private struct ObjectCard: View {
         content
             .frame(width: screenW, height: screenH)
             .clipShape(shape)
-            .atlasP1Glass(shape)                       // Apple 液态玻璃（星图同款 P1 玻璃）
+            .atlasFloatingGlass(shape, interactive: true)
+            .overlay {
+                shape
+                    .stroke(
+                        LinearGradient(
+                            colors: [.white.opacity(0.72), .white.opacity(0.18), .white.opacity(0.48)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
             .overlay(shape.stroke(selected ? Color.white.opacity(0.6) : Color.clear,
                                   lineWidth: 1.5))
             .overlay { cornerArcs }
@@ -2517,7 +2585,7 @@ private struct ObjectCard: View {
     @ViewBuilder
     private var content: some View {
         if object.kind == .map {
-            MapCardBody(name: store.displayName(object), onExpand: onExpand)
+            MapCardBody(name: "世界地图", coastPaths: store.mapCoastPaths, onExpand: onExpand)
         } else {
             InfoCardBody(object: object, displayName: store.displayName(object), store: store)
         }
@@ -2653,26 +2721,29 @@ private struct CornerArcShape: Shape {
 
 private struct MapCardBody: View {
     var name: String
+    var coastPaths: [[CGPoint]]
     var onExpand: () -> Void
 
     var body: some View {
         ZStack {
-            // 极淡制图预览
             Canvas { ctx, size in
-                let rects = [
-                    CGRect(x: size.width * 0.16, y: size.height * 0.26, width: size.width * 0.40, height: size.height * 0.44),
-                    CGRect(x: size.width * 0.50, y: size.height * 0.34, width: size.width * 0.34, height: size.height * 0.40)
-                ]
-                for (i, rect) in rects.enumerated() {
-                    let path = islandPath(in: rect, phase: CGFloat(i) * 0.8)
-                    ctx.fill(path, with: .color(.white.opacity(0.06)))
-                    ctx.stroke(path, with: .color(.white.opacity(0.20)), lineWidth: 1)
-                    for inset in stride(from: CGFloat(10), through: 34, by: 12) {
-                        let r = rect.insetBy(dx: inset, dy: inset * 0.6)
-                        if r.width > 14 {
-                            ctx.stroke(islandPath(in: r, phase: CGFloat(i) * 0.8 + inset * 0.02),
-                                       with: .color(.white.opacity(0.05)), lineWidth: 0.6)
+                if coastPaths.isEmpty {
+                    let border = Path(roundedRect: CGRect(x: size.width * 0.18, y: size.height * 0.30, width: size.width * 0.64, height: size.height * 0.40), cornerRadius: 32)
+                    ctx.stroke(border, with: .color(.white.opacity(0.18)), style: .init(lineWidth: 1, dash: [5, 6]))
+                } else {
+                    let inset: CGFloat = 30
+                    let sx = (size.width - inset * 2) / 1000
+                    let sy = (size.height - inset * 2) / 650
+                    let factor = min(sx, sy)
+                    let ox = (size.width - 1000 * factor) / 2
+                    let oy = (size.height - 650 * factor) / 2
+                    for coast in coastPaths where coast.count > 1 {
+                        var path = Path()
+                        for (index, point) in coast.enumerated() {
+                            let projected = CGPoint(x: ox + point.x * factor, y: oy + point.y * factor)
+                            index == 0 ? path.move(to: projected) : path.addLine(to: projected)
                         }
+                        ctx.stroke(path, with: .color(.white.opacity(0.78)), style: .init(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
                     }
                 }
             }
@@ -2700,19 +2771,6 @@ private struct MapCardBody: View {
         .simultaneousGesture(TapGesture(count: 2).onEnded { onExpand() })
     }
 
-    private func islandPath(in rect: CGRect, phase: CGFloat) -> Path {
-        var path = Path()
-        let samples = 36
-        for index in 0...samples {
-            let angle = CGFloat(index) / CGFloat(samples) * .pi * 2
-            let variation = 1 + 0.09 * sin(angle * 3 + phase) + 0.05 * cos(angle * 5 - phase)
-            let point = CGPoint(x: rect.midX + cos(angle) * rect.width * 0.5 * variation,
-                                y: rect.midY + sin(angle) * rect.height * 0.5 * variation)
-            index == 0 ? path.move(to: point) : path.addLine(to: point)
-        }
-        path.closeSubpath()
-        return path
-    }
 }
 
 // MARK: - 普通对象卡：随类型微调设计

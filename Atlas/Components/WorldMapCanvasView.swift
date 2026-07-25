@@ -16,6 +16,7 @@ struct WorldMapCanvasView: NSViewRepresentable {
     var mode: String = "create"
     var canEdit: Bool = false
     var initialMapJSON: String?
+    var pendingPlacementsJSON: String?
     var onExit: () -> Void = {}
     var onSave: (_ locations: Int, _ mapJSON: String) -> Void = { _, _ in }
 
@@ -37,6 +38,21 @@ struct WorldMapCanvasView: NSViewRepresentable {
             forMainFrameOnly: true
         )
         controller.addUserScript(modeScript)
+        if let pendingPlacementsJSON,
+           let pendingData = pendingPlacementsJSON.data(using: .utf8) {
+            let encoded = pendingData.base64EncodedString()
+            controller.addUserScript(
+                WKUserScript(
+                    source: """
+                    window.ATLAS_CANVAS_PENDING = JSON.parse(
+                      decodeURIComponent(escape(atob("\(encoded)")))
+                    );
+                    """,
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: true
+                )
+            )
+        }
         if let initialMapJSON,
            let mapData = initialMapJSON.data(using: .utf8) {
             let encoded = mapData.base64EncodedString()

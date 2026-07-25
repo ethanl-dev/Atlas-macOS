@@ -77,6 +77,7 @@ struct RootView: View {
             destinationView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(AtlasCanvasBackground())
+                .zIndex(0)
                 .overlay(alignment: .top) {
                     if let toast = model.toast {
                         ToastView(message: toast)
@@ -85,21 +86,16 @@ struct RootView: View {
                     }
                 }
                 .animation(.snappy(duration: 0.24), value: model.toast)
-
-            if model.destination != .canvas {
-                VStack {
-                    Spacer()
-                    HStack(alignment: .bottom) {
-                        ProfileBrandDock(model: model)
-                        Spacer()
-                        ProjectQuickMenu(model: model)
-                    }
-                }
+        }
+        .overlay(alignment: .bottomLeading) {
+            ProfileBrandDock(model: model)
                 .padding(.leading, 24)
-                .padding(.top, 24)
+                .padding(.bottom, 24)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            ProjectQuickMenu(model: model)
                 .padding(.bottom, 24)
                 .padding(.trailing, 12)
-            }
         }
     }
 
