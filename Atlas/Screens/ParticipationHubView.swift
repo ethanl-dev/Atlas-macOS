@@ -31,6 +31,8 @@ struct ParticipationHubView: View {
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
+                ProjectBreadcrumb(model: model, pageName: AtlasDestination.tasks.rawValue)
+
                 HStack(spacing: AtlasSpacing.s) {
                 ForEach(Section.allCases) { item in
                     Button {
@@ -180,6 +182,36 @@ struct ParticipationHubView: View {
                 RoundedRectangle(cornerRadius: AtlasRadius.panel, style: .continuous)
             )
             .onTapGesture { }
+        }
+    }
+}
+
+/// Persistent project context for pages that can be opened from cross-project surfaces.
+struct ProjectBreadcrumb: View {
+    @ObservedObject var model: AtlasAppModel
+    let pageName: String
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: model.activeWorld.symbol)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AtlasColor.textSecondary)
+            Text("《\(model.activeWorld.name)》")
+                .font(AtlasFont.label)
+                .foregroundStyle(AtlasColor.textPrimary)
+            Text("·")
+                .foregroundStyle(AtlasColor.textTertiary)
+            Text(pageName)
+                .font(AtlasFont.monoSmall)
+                .foregroundStyle(AtlasColor.textTertiary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, AtlasSpacing.xl)
+        .padding(.vertical, AtlasSpacing.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.black.opacity(0.32))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(AtlasColor.borderSubtle).frame(height: 0.5)
         }
     }
 }

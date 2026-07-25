@@ -593,6 +593,23 @@ final class AtlasAppModel: ObservableObject {
         destination = .canvas
     }
 
+    /// Opens an in-project destination from a cross-project surface such as Inbox.
+    /// The active project and access mode must be resolved before the permission check.
+    func openProject(worldID: String, destination target: AtlasDestination) {
+        activeWorldID = worldID
+        let resolvedRole = role(in: worldID)
+        accessMode = isActiveWorldArchived ? .publicPreview : resolvedRole.accessMode
+        let name = activeWorld.name
+
+        guard canAccess(target) else {
+            destination = resolvedRole.landingDestination
+            showToast("已进入《\(name)》，当前身份无权访问该页面，已跳转公开预览")
+            return
+        }
+        destination = target
+        showToast("已进入《\(name)》· \(target.rawValue)")
+    }
+
     func openWorld(_ world: AtlasWorld) {
         activeWorldID = world.id
         let resolvedRole = role(in: world.id)

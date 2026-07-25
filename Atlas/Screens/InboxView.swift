@@ -233,15 +233,7 @@ struct InboxView: View {
                 Spacer()
 
                 Button {
-                    switch item.kind {
-                    case .review:
-                        model.accessMode = .manage
-                        model.destination = .review
-                    case .task:
-                        model.destination = .tasks
-                    case .world:
-                        model.navigate(to: .canvas)
-                    }
+                    model.openProject(worldID: item.worldID, destination: item.kind.destination)
                 } label: {
                     AtlasButtonLabel(title: item.action, systemImage: "arrow.right")
                 }
@@ -261,9 +253,20 @@ struct InboxView: View {
 }
 
 private struct AtlasInboxItem: Identifiable {
-    enum Kind { case review, task, world }
+    enum Kind {
+        case review, task, world
+
+        var destination: AtlasDestination {
+            switch self {
+            case .review: return .review
+            case .task: return .tasks
+            case .world: return .canvas
+            }
+        }
+    }
 
     let id: String
+    let worldID: String
     let title: String
     let summary: String
     let detail: String
@@ -275,15 +278,15 @@ private struct AtlasInboxItem: Identifiable {
     let unread: Bool
 
     static let samples: [AtlasInboxItem] = [
-        .init(id: "inbox-1", title: "关系申请等待共同确认",
+        .init(id: "inbox-1", worldID: "mist-letters", title: "关系申请等待共同确认",
               summary: "岑希望与伊莱建立临时同盟。",
               detail: "这项关系会影响夜航守望事件的日志公开方式。双方确认后，关系将进入角色时间线，并成为 Wiki 候选变更。",
               source: "雾海来信", time: "刚刚", symbol: "person.2", action: "处理确认", kind: .review, unread: true),
-        .init(id: "inbox-2", title: "夜航守望将在 48 小时后关闭",
+        .init(id: "inbox-2", worldID: "night-watch", title: "夜航守望将在 48 小时后关闭",
               summary: "你已经接取任务，但还没有提交回应。",
               detail: "在截止前提交文字、绘画或其他创作。作品可以关联雾港、白塔和参与角色，并按照投入程度进行自评。",
               source: "任务提醒", time: "2 小时前", symbol: "clock", action: "继续任务", kind: .task, unread: true),
-        .init(id: "inbox-3", title: "雾港状态等待事件结算",
+        .init(id: "inbox-3", worldID: "mist-letters", title: "雾港状态等待事件结算",
               summary: "12 个参与者提交可能改变地点开放状态。",
               detail: "事件结算只会生成影响预览，不会自动改写正式世界线。管理者确认后，地点状态、角色经历和相关 Wiki 条目才会更新。",
               source: "世界状态", time: "昨天", symbol: "mappin.and.ellipse", action: "查看地图", kind: .world, unread: false)

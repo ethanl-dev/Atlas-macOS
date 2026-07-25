@@ -14,6 +14,7 @@ struct ReviewQueueView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            ProjectBreadcrumb(model: model, pageName: AtlasDestination.review.rawValue)
             header
             Divider().overlay(AtlasColor.borderSubtle)
 
