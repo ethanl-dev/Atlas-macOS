@@ -180,7 +180,7 @@ private struct AtlasLightfallBackground: View {
 
     var body: some View {
             TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
+            let t = timeline.date.timeIntervalSinceReferenceDate * 1.22
             ZStack {
                 Color(red: 0.015, green: 0.014, blue: 0.025)
 
@@ -196,8 +196,8 @@ private struct AtlasLightfallBackground: View {
         ZStack {
             auroraOrb(
                 colors: [
-                    Color(red: 0.12, green: 0.88, blue: 0.72).opacity(0.42),
-                    Color(red: 0.18, green: 0.46, blue: 1.0).opacity(0.20),
+                    Color(red: 0.12, green: 0.88, blue: 0.72).opacity(0.31),
+                    Color(red: 0.18, green: 0.46, blue: 1.0).opacity(0.14),
                     .clear
                 ],
                 width: 0.62,
@@ -210,8 +210,8 @@ private struct AtlasLightfallBackground: View {
 
             auroraOrb(
                 colors: [
-                    Color(red: 0.68, green: 0.20, blue: 1.0).opacity(0.34),
-                    Color(red: 1.0, green: 0.22, blue: 0.58).opacity(0.16),
+                    Color(red: 0.68, green: 0.20, blue: 1.0).opacity(0.25),
+                    Color(red: 1.0, green: 0.22, blue: 0.58).opacity(0.11),
                     .clear
                 ],
                 width: 0.54,
@@ -224,8 +224,8 @@ private struct AtlasLightfallBackground: View {
 
             auroraOrb(
                 colors: [
-                    Color(red: 0.10, green: 0.72, blue: 1.0).opacity(0.28),
-                    Color(red: 0.45, green: 1.0, blue: 0.72).opacity(0.13),
+                    Color(red: 0.10, green: 0.72, blue: 1.0).opacity(0.21),
+                    Color(red: 0.45, green: 1.0, blue: 0.72).opacity(0.09),
                     .clear
                 ],
                 width: 0.46,
@@ -329,7 +329,7 @@ private struct AtlasLightfallBackground: View {
             .blur(radius: 72)
             .rotationEffect(.degrees(rotation))
             .offset(x: x, y: y)
-            .opacity(0.40)
+            .opacity(0.30)
     }
 
     private func ambientGlow(time: TimeInterval) -> some View {

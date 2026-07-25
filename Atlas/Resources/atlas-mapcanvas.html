@@ -290,8 +290,16 @@ input[type=range]{accent-color:#f4f4f6}
   border:1px solid rgba(255,255,255,.18);
   box-shadow:inset 0 1px rgba(255,255,255,.26),0 14px 38px rgba(0,0,0,.36)}
 .editor-actions button{height:36px!important;border-radius:18px!important}
+.editor-actions .dark-button{display:none!important}
+.editor-history{
+  display:flex!important;position:fixed;left:50%;top:24px;transform:translateX(-50%);
+  gap:3px;padding:4px;border-radius:22px;pointer-events:auto;
+  background:linear-gradient(145deg,rgba(255,255,255,.10),rgba(12,14,22,.50));
+  border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px rgba(255,255,255,.22),0 14px 34px rgba(0,0,0,.32)}
+.editor-history button{height:34px;padding:0 13px;border-radius:17px}
 .editor-body{padding:12px;gap:10px}
 .tool-dock{
+  padding-top:76px!important;
   border:1px solid rgba(255,255,255,.13);
   border-radius:18px;
   background:linear-gradient(155deg,rgba(255,255,255,.09),rgba(16,17,24,.58))!important;
@@ -401,6 +409,14 @@ input[type=range]{accent-color:#f4f4f6}
 .editor-shell .back-button{position:fixed!important;left:24px;top:24px;z-index:120}
 .editor-shell .editor-title{padding:0}
 .card-copy blockquote:empty{display:none}
+.tool-explain,.layers-panel{display:none!important}
+.layers-toggle{
+  right:24px!important;top:82px!important;height:40px!important;padding:0 16px!important;
+  border-radius:20px!important;color:#fff!important;
+  background:linear-gradient(135deg,rgba(94,77,196,.48),rgba(28,164,133,.30))!important;
+  border:1px solid rgba(255,255,255,.24)!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.30),0 14px 36px rgba(0,0,0,.36)!important}
+.tool-dock .pending-dot{width:10px;height:10px;border-radius:50%;box-shadow:0 0 12px currentColor}
 @media(max-width:760px){.legend,.legend-reopen,.scale-bar{left:18px!important;bottom:92px!important}.zoom-control{right:82px;bottom:24px}}
 .mode-notice{top:82px;color:#fff}
 .map-search-panel{
@@ -22610,15 +22626,12 @@ input[type=range]{accent-color:#f4f4f6}
   var GX = 800;
   var GY = 520;
   var DEFAULT_CATEGORIES = [
-    { name: "\u5730\u70B9", color: "#5c806d" },
-    { name: "NPC", color: "#a55440" },
-    { name: "\u9635\u8425", color: "#9e7919" },
-    { name: "\u7EC4\u7EC7", color: "#546991" },
-    { name: "\u751F\u7269", color: "#765f94" },
-    { name: "\u6280\u672F", color: "#3f7f89" },
-    { name: "\u751F\u6D3B\u65B9\u5F0F", color: "#b06f4a" },
-    { name: "\u7269\u54C1", color: "#687f52" },
-    { name: "\u81EA\u5B9A\u4E49\u7C7B\u522B", color: "#77746e" }
+    { name: "\u5730\u70B9", color: "#59C3A5" },
+    { name: "\u89D2\u8272", color: "#F08A72" },
+    { name: "\u7EC4\u7EC7", color: "#7DA7FF" },
+    { name: "\u7269\u4EF6", color: "#E5B95C" },
+    { name: "\u4F5C\u54C1", color: "#C58BFA" },
+    { name: "\u4FBF\u7B7E", color: "#AEB6C4" }
   ];
   var DEFAULT_RELATION_CATEGORIES = [
     { name: "\u5B58\u5728", color: "#8a6f91" },
@@ -22886,8 +22899,7 @@ input[type=range]{accent-color:#f4f4f6}
     const [saveDialog, setSaveDialog] = (0, import_react.useState)(false);
     const [coastRoughness, setCoastRoughness] = (0, import_react.useState)(initialMap?.coastRoughness ?? 55);
     const [categories, setCategories] = (0, import_react.useState)(() => {
-      const source = initialMap?.categories ?? DEFAULT_CATEGORIES;
-      return [...source.filter((category) => category.name !== "\u5176\u4ED6" && category.name !== "\u81EA\u5B9A\u4E49\u7C7B\u522B"), { name: "\u81EA\u5B9A\u4E49\u7C7B\u522B", color: "#77746e" }];
+      return DEFAULT_CATEGORIES;
     });
     const [relationCategories, setRelationCategories] = (0, import_react.useState)(() => {
       const source = initialMap?.relationCategories ?? DEFAULT_RELATION_CATEGORIES;
@@ -23303,7 +23315,7 @@ input[type=range]{accent-color:#f4f4f6}
       if (t === "area" && activePath.current.length > 3) {
         const pending = pendingPlacement.current;
         const id = pending?.id ?? `area-${Date.now()}`, points = smartClose([...activePath.current], Math.max(22, brushRef.current * 0.55));
-        annotationsRef.current.push({ id, kind: "area", points, title: pending?.name ?? "", category: pending?.category ?? "\u8303\u56F4\u5F71\u54CD", description: "", color: "#9e7919" });
+        annotationsRef.current.push({ id, kind: "area", points, title: pending?.name ?? "", category: pending?.category ?? "\u8303\u56F4\u5F71\u54CD", description: "", color: pending?.color ?? "#FF8F5C" });
         if (pending) {
           setPendingPlacements((items) => items.filter((item) => item.id !== pending.id));
           pendingPlacement.current = null;
@@ -23315,7 +23327,7 @@ input[type=range]{accent-color:#f4f4f6}
       if (t === "point") {
         const pending = pendingPlacement.current;
         const id = pending?.id ?? `point-${Date.now()}`;
-        annotationsRef.current.push({ id, kind: "point", points: [p], title: pending?.name ?? "", category: pending?.category ?? "\u5730\u70B9", description: "", color: "#5c806d" });
+        annotationsRef.current.push({ id, kind: "point", points: [p], title: pending?.name ?? "", category: pending?.category ?? "\u5730\u70B9", description: "", color: pending?.color ?? "#59C3A5" });
         if (pending) {
           setPendingPlacements((items) => items.filter((item) => item.id !== pending.id));
           pendingPlacement.current = null;
@@ -23434,7 +23446,7 @@ input[type=range]{accent-color:#f4f4f6}
       { label: "\u5BFC\u822A", items: [{ id: "pan", name: "\u79FB\u52A8" }] },
       { label: "\u5730\u5F62", items: [{ id: "raise", name: "\u62AC\u5347" }, { id: "lower", name: "\u4E0B\u538B" }, { id: "seaLevel", name: "\u6D77\u5E73\u9762" }, { id: "smooth", name: "\u5E73\u6ED1" }, { id: "flatten", name: "\u538B\u5E73" }, { id: "river", name: "\u6CB3\u6D41\u7ED8\u5236" }] },
       { label: "\u4E16\u754C\u5185\u5BB9", items: [{ id: "point", name: "\u8BBE\u5B9A\u70B9" }, { id: "line", name: "\u5173\u8054\u7EBF" }, { id: "area", name: "\u8303\u56F4\u5F71\u54CD" }, { id: "moveItem", name: "\u79FB\u52A8\u5185\u5BB9" }, { id: "deleteItem", name: "\u5220\u9664\u5185\u5BB9" }] },
-      ...(pendingPlacements.length ? [{ label: "\u5F85\u5B9A\u4F4D\u5230\u5730\u56FE", items: pendingPlacements.map((item) => ({ id: `pending-${item.id}`, name: `${item.name} \xB7 ${item.placement}`, pending: item })) }] : [])
+      ...(pendingPlacements.length ? [{ label: "\u5F85\u5B9A\u4F4D\u5230\u5730\u56FE", items: pendingPlacements.map((item) => ({ id: `pending-${item.id}`, name: item.name, pending: item })) }] : [])
     ];
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "editor-shell", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "editor-top", children: [
@@ -23467,7 +23479,7 @@ input[type=range]{accent-color:#f4f4f6}
               setTool(item.id);
             }
           }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("i", { className: `tool-icon tool-${item.id}` }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("i", { className: item.pending ? "pending-dot" : `tool-icon tool-${item.id}`, style: item.pending ? { background: item.pending.color, color: item.pending.color } : void 0 }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.name })
           ] }, item.id))
         ] }, group.label)) }),
@@ -23511,8 +23523,8 @@ input[type=range]{accent-color:#f4f4f6}
               " km"
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "layers-toggle", onClick: () => setLayersOpen((v) => !v), children: "\u56FE\u5C42" }),
-          layersOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", { className: "layers-panel", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "layers-toggle", onClick: () => setSaveDialog(true), children: "\u4FDD\u5B58\u5730\u56FE" }),
+          false && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", { className: "layers-panel", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "\u5730\u56FE\u56FE\u5C42" }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setLayersOpen(false) })
@@ -23539,7 +23551,7 @@ input[type=range]{accent-color:#f4f4f6}
             ] }),
             cardDraft.kind === "point" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
               "\u7C7B\u522B",
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "category-select-row single", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { value: categories.some((category) => category.name === cardDraft.category) ? cardDraft.category : "\u81EA\u5B9A\u4E49\u7C7B\u522B", onChange: (e) => chooseCategory(e.target.value), children: categories.map((category) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: category.name, children: category.name }, category.name)) }) })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "category-select-row single", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { value: categories.some((category) => category.name === cardDraft.category) ? cardDraft.category : "\u4FBF\u7B7E", onChange: (e) => chooseCategory(e.target.value), children: categories.map((category) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: category.name, children: category.name }, category.name)) }) })
             ] }) : cardDraft.kind === "line" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
               "\u5173\u8054\u7C7B\u522B",
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "category-select-row single", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { value: relationCategories.some((category) => category.name === cardDraft.category) ? cardDraft.category : "\u81EA\u5B9A\u4E49\u5173\u8054", onChange: (e) => chooseCategory(e.target.value), children: relationCategories.map((category) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: category.name, children: category.name }, category.name)) }) })
@@ -23547,7 +23559,7 @@ input[type=range]{accent-color:#f4f4f6}
               "\u7C7B\u578B",
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { value: cardDraft.category, onChange: (e) => setCardDraft((draft) => draft ? { ...draft, category: e.target.value } : draft) })
             ] }),
-            (cardDraft.kind === "point" && !categories.some((category) => category.name === cardDraft.category) || cardDraft.kind === "line" && !relationCategories.some((category) => category.name === cardDraft.category)) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
+            cardDraft.kind === "line" && !relationCategories.some((category) => category.name === cardDraft.category) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
               cardDraft.kind === "line" ? "\u5173\u8054\u540D\u79F0" : "\u7C7B\u522B\u540D\u79F0",
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { placeholder: "\u7559\u7A7A\u5219\u663E\u793A\u4E3A\u201C\u5176\u4ED6\u201D", value: customCategoryName, onChange: (e) => {
                 setCustomCategoryName(e.target.value);

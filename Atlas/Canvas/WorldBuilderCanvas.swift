@@ -129,11 +129,6 @@ struct WorldBuilderCanvas: View {
                     .contentShape(Rectangle())
                     .onTapGesture { select(nil) }
 
-                if store.projection == .map && store.showMapBase {
-                    mapBase
-                        .transition(.opacity)
-                }
-
                 if store.projection == .relation {
                     relationLayer(in: proxy.size)
                     relationChips(in: proxy.size)
@@ -143,27 +138,29 @@ struct WorldBuilderCanvas: View {
                     timelineAxis(timeline)
                 }
 
-                ForEach(store.objects) { object in
-                    let onTimeline = store.projection == .timeline
-                    let dimmed = onTimeline && object.kind != .event
-                    let world = (onTimeline ? timeline.positions[object.id] : nil) ?? object.position
-                    ObjectCard(
-                        object: object,
-                        scale: scale,
-                        selected: store.selectedIDs.contains(object.id),
-                        store: store,
-                        canEdit: canEdit,
-                        onSelect: { select(object.id) },
-                        onExpand: { openMapEditor(object.id) },
-                        pan: pan,
-                        layoutLocked: onTimeline,
-                        dimmed: dimmed
-                    )
-                    .position(worldToScreen(world))
-                    .opacity(dimmed ? 0.12 : 1)
-                    .allowsHitTesting(!dimmed)
-                    .animation(.spring(response: 0.45, dampingFraction: 0.82), value: onTimeline)
-                    .transition(.scale(scale: 0.92).combined(with: .opacity))
+                AtlasGlassGroup(spacing: 36) {
+                    ForEach(store.objects) { object in
+                        let onTimeline = store.projection == .timeline
+                        let dimmed = onTimeline && object.kind != .event
+                        let world = (onTimeline ? timeline.positions[object.id] : nil) ?? object.position
+                        ObjectCard(
+                            object: object,
+                            scale: scale,
+                            selected: store.selectedIDs.contains(object.id),
+                            store: store,
+                            canEdit: canEdit,
+                            onSelect: { select(object.id) },
+                            onExpand: { openMapEditor(object.id) },
+                            pan: pan,
+                            layoutLocked: onTimeline,
+                            dimmed: dimmed
+                        )
+                        .position(worldToScreen(world))
+                        .opacity(dimmed ? 0.12 : 1)
+                        .allowsHitTesting(!dimmed)
+                        .animation(.spring(response: 0.45, dampingFraction: 0.82), value: onTimeline)
+                        .transition(.scale(scale: 0.92).combined(with: .opacity))
+                    }
                 }
 
                 if let plan = organizer.plan {
@@ -215,30 +212,6 @@ struct WorldBuilderCanvas: View {
             .onDisappear { stopScrollMonitor(); stopKeyMonitor() }
             .onChange(of: proxy.size) { _, newValue in viewSize = newValue }
         }
-    }
-
-    // 地图底盘（骨架阶段：原生的极淡制图岛形；点“编辑地图”进真编辑器）
-    private var mapBase: some View {
-        Canvas { context, size in
-            guard store.mapMade else { return }
-            let rects = [
-                CGRect(x: size.width * 0.22, y: size.height * 0.24, width: size.width * 0.34, height: size.height * 0.40),
-                CGRect(x: size.width * 0.52, y: size.height * 0.30, width: size.width * 0.30, height: size.height * 0.34)
-            ]
-            for (i, rect) in rects.enumerated() {
-                let path = organicPath(in: rect, phase: CGFloat(i) * 0.8)
-                context.fill(path, with: .color(.white.opacity(0.05)))
-                context.stroke(path, with: .color(.white.opacity(0.14)), lineWidth: 1)
-                for inset in stride(from: CGFloat(16), through: 48, by: 16) {
-                    let r = rect.insetBy(dx: inset, dy: inset * 0.6)
-                    if r.width > 20 {
-                        context.stroke(organicPath(in: r, phase: CGFloat(i) * 0.8 + inset * 0.01),
-                                       with: .color(.white.opacity(0.04)), lineWidth: 0.6)
-                    }
-                }
-            }
-        }
-        .allowsHitTesting(false)
     }
 
     // 关系连线：粗细/亮度随强度；提议中的关系用虚线；选中的关系提亮。
@@ -455,18 +428,10 @@ struct WorldBuilderCanvas: View {
                         .foregroundStyle(AtlasColor.textPrimary)
                         .lineLimit(1)
                         .frame(maxWidth: 210, alignment: .leading)
-
-                    if canEdit {
-                        Button { openWorldNameEditor() } label: {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 10.5, weight: .semibold))
-                                .frame(width: 22, height: 22)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(AtlasColor.textSecondary)
-                        .atlasP1Glass(Circle(), interactive: true)
-                        .help("编辑企划名称")
-                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    if canEdit { openWorldNameEditor() }
                 }
 
                 Text(canEdit ? (store.saved ? "所有更改已保存" : "正在编辑 · 尚未保存") : "只读浏览")
@@ -480,8 +445,6 @@ struct WorldBuilderCanvas: View {
     private var topBarActions: some View {
         if canEdit {
             HStack(spacing: AtlasSpacing.m) {
-                baseLayerMenu
-
                 Button {
                     store.saved = true
                     model.showToast("世界已保存 · \(store.objects.count) 个对象")
@@ -616,30 +579,6 @@ struct WorldBuilderCanvas: View {
         closeWorldNameEditor()
     }
 
-    // MARK: - 底盘菜单（收进顶栏，不占画布）
-
-    private var baseLayerMenu: some View {
-        Menu {
-            Toggle("显示地图底盘", isOn: $store.showMapBase)
-            Button {
-                withAnimation(.spring(response: 0.48, dampingFraction: 0.86)) {
-                    showMapEditor = true
-                }
-            } label: {
-                Label(store.mapMade ? "编辑地图底盘…" : "绘制地图底盘…", systemImage: "map")
-            }
-        } label: {
-            AtlasButtonLabel(title: "底盘", systemImage: "square.3.layers.3d")
-                .font(AtlasFont.label)
-                .foregroundStyle(AtlasColor.textPrimary)
-                .padding(.horizontal, AtlasSpacing.m)
-                .padding(.vertical, AtlasSpacing.s)
-                .atlasP1Glass(Capsule(), interactive: true)
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-    }
-
     // MARK: - 右侧详情卡
 
     @ViewBuilder
@@ -684,7 +623,7 @@ struct WorldBuilderCanvas: View {
             sessionTray
         }
         .padding(.leading, AtlasSpacing.l)
-        .padding(.bottom, AtlasSpacing.l)
+        .padding(.bottom, 96)
         .frame(maxHeight: .infinity, alignment: .leading)
     }
 
@@ -1819,7 +1758,7 @@ private struct ObjectCard: View {
     @ViewBuilder
     private var content: some View {
         if object.kind == .map {
-            MapCardBody(name: store.displayName(object), onExpand: onExpand)
+            MapCardBody(name: "世界地图", coastPaths: store.mapCoastPaths, onExpand: onExpand)
         } else {
             InfoCardBody(object: object, displayName: store.displayName(object))
         }
@@ -1955,26 +1894,29 @@ private struct CornerArcShape: Shape {
 
 private struct MapCardBody: View {
     var name: String
+    var coastPaths: [[CGPoint]]
     var onExpand: () -> Void
 
     var body: some View {
         ZStack {
-            // 极淡制图预览
             Canvas { ctx, size in
-                let rects = [
-                    CGRect(x: size.width * 0.16, y: size.height * 0.26, width: size.width * 0.40, height: size.height * 0.44),
-                    CGRect(x: size.width * 0.50, y: size.height * 0.34, width: size.width * 0.34, height: size.height * 0.40)
-                ]
-                for (i, rect) in rects.enumerated() {
-                    let path = islandPath(in: rect, phase: CGFloat(i) * 0.8)
-                    ctx.fill(path, with: .color(.white.opacity(0.06)))
-                    ctx.stroke(path, with: .color(.white.opacity(0.20)), lineWidth: 1)
-                    for inset in stride(from: CGFloat(10), through: 34, by: 12) {
-                        let r = rect.insetBy(dx: inset, dy: inset * 0.6)
-                        if r.width > 14 {
-                            ctx.stroke(islandPath(in: r, phase: CGFloat(i) * 0.8 + inset * 0.02),
-                                       with: .color(.white.opacity(0.05)), lineWidth: 0.6)
+                if coastPaths.isEmpty {
+                    let border = Path(roundedRect: CGRect(x: size.width * 0.18, y: size.height * 0.30, width: size.width * 0.64, height: size.height * 0.40), cornerRadius: 32)
+                    ctx.stroke(border, with: .color(.white.opacity(0.18)), style: .init(lineWidth: 1, dash: [5, 6]))
+                } else {
+                    let inset: CGFloat = 30
+                    let sx = (size.width - inset * 2) / 1000
+                    let sy = (size.height - inset * 2) / 650
+                    let factor = min(sx, sy)
+                    let ox = (size.width - 1000 * factor) / 2
+                    let oy = (size.height - 650 * factor) / 2
+                    for coast in coastPaths where coast.count > 1 {
+                        var path = Path()
+                        for (index, point) in coast.enumerated() {
+                            let projected = CGPoint(x: ox + point.x * factor, y: oy + point.y * factor)
+                            index == 0 ? path.move(to: projected) : path.addLine(to: projected)
                         }
+                        ctx.stroke(path, with: .color(.white.opacity(0.78)), style: .init(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
                     }
                 }
             }
@@ -2002,19 +1944,6 @@ private struct MapCardBody: View {
         .simultaneousGesture(TapGesture(count: 2).onEnded { onExpand() })
     }
 
-    private func islandPath(in rect: CGRect, phase: CGFloat) -> Path {
-        var path = Path()
-        let samples = 36
-        for index in 0...samples {
-            let angle = CGFloat(index) / CGFloat(samples) * .pi * 2
-            let variation = 1 + 0.09 * sin(angle * 3 + phase) + 0.05 * cos(angle * 5 - phase)
-            let point = CGPoint(x: rect.midX + cos(angle) * rect.width * 0.5 * variation,
-                                y: rect.midY + sin(angle) * rect.height * 0.5 * variation)
-            index == 0 ? path.move(to: point) : path.addLine(to: point)
-        }
-        path.closeSubpath()
-        return path
-    }
 }
 
 // MARK: - 普通对象卡：随类型微调设计

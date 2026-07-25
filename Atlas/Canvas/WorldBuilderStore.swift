@@ -61,7 +61,7 @@ enum BuilderKind: String, CaseIterable, Identifiable {
 
     var hint: String {
         switch self {
-        case .map: return "世界底盘的预览"
+        case .map: return "用户绘制的世界地图"
         case .location: return "钉在坐标的地方"
         case .character: return "可驻留在地点的人"
         case .org: return "势力、阵营或组织"
@@ -235,7 +235,6 @@ final class WorldBuilderStore: ObservableObject {
     }
 
     private var groupDragAnchors: [String: CGPoint]?
-    @Published var showMapBase = false      // 全画布地图底盘 underlay（地图现在主要以卡片存在，默认关）
     @Published var mapMade = false          // 是否已经绘制过地图底盘
     @Published var saved = true
     @Published var mapJSON: String?
@@ -246,7 +245,7 @@ final class WorldBuilderStore: ObservableObject {
         self.worldName = worldName
         if seeded {
             self.objects = [
-                .init(id: "map-seed", kind: .map, name: "世界底盘",
+                .init(id: "map-seed", kind: .map, name: "世界地图",
                       summary: "",
                       position: CGPoint(x: 470, y: 330), size: BuilderKind.map.defaultSize),
                 .init(id: "loc-seed", kind: .location, name: "雾港",
@@ -384,7 +383,8 @@ final class WorldBuilderStore: ObservableObject {
                 "id": object.id,
                 "name": displayName(object),
                 "placement": preferredMapPlacement(for: object).rawValue,
-                "category": mapCategory(for: object.kind)
+                "category": mapCategory(for: object.kind),
+                "color": mapCategoryColor(for: object.kind)
             ]
         }
         guard let data = try? JSONSerialization.data(withJSONObject: payload),
@@ -485,10 +485,37 @@ final class WorldBuilderStore: ObservableObject {
         default: return "自定义类别"
         }
     }
+
+    private func mapCategoryColor(for kind: BuilderKind) -> String {
+        switch kind {
+        case .location: return "#59C3A5"
+        case .character: return "#F08A72"
+        case .org: return "#7DA7FF"
+        case .item: return "#E5B95C"
+        case .work: return "#C58BFA"
+        case .note: return "#AEB6C4"
+        case .event: return "#FF8F5C"
+        case .rule: return "#62D1D8"
+        default: return "#AEB6C4"
+        }
+    }
+
+    var mapCoastPaths: [[CGPoint]] {
+        guard let mapJSON,
+              let data = mapJSON.data(using: .utf8),
+              let archive = try? JSONDecoder().decode(MapArchive.self, from: data) else { return [] }
+        return archive.coasts.map { path in path.map { CGPoint(x: $0.x, y: $0.y) } }
+    }
 }
 
 private struct MapArchive: Decodable {
     var annotations: [MapAnnotationArchive]
+    var coasts: [[MapPointArchive]] = []
+}
+
+private struct MapPointArchive: Decodable {
+    var x: Double
+    var y: Double
 }
 
 private struct MapAnnotationArchive: Decodable {
