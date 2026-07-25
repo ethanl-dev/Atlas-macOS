@@ -61,6 +61,34 @@ struct AtlasCharacterProfile: Identifiable, Hashable {
                 .init(title: "共同研究", state: .allowed),
                 .init(title: "情感关系", state: .confirm)
             ]
+        ),
+        .init(
+            id: "char-daylight", name: "白昼", owner: "@daylight", role: "外来调查者",
+            location: "第七码头", organization: "自由调查组",
+            summary: "从企划外部来到雾港，正在追查一批从未抵达收件人的旧信，并把每次退潮当作重新校准线索的机会。",
+            symbol: "magnifyingglass",
+            dos: ["共同调查公开线索与城市传闻", "允许描写一般行动与非致命冲突", "欢迎邀请参与短期合作"],
+            donts: ["替角色确认最终归属", "未经确认公开私人调查笔记", "造成永久伤害或强制阵营变化"],
+            permissions: [
+                .init(title: "二次创作", state: .allowed),
+                .init(title: "剧情代入", state: .allowed),
+                .init(title: "阵营变化", state: .confirm),
+                .init(title: "永久伤害", state: .forbidden)
+            ]
+        ),
+        .init(
+            id: "char-afra", name: "阿芙拉", owner: "@northwind", role: "雾海信使",
+            location: "北岸灯塔", organization: "潮间邮路",
+            summary: "沿着只在低潮时出现的邮路送信，熟悉雾海中每一处短暂显露的礁石，却拒绝谈论自己从哪里取得收件地址。",
+            symbol: "envelope",
+            dos: ["送信、航路协作与公开场景互动", "允许引用公开携带的信件", "欢迎围绕北岸展开短篇创作"],
+            donts: ["拆阅未公开信件内容", "替角色决定真实出身", "未经确认建立永久亲密关系"],
+            permissions: [
+                .init(title: "二次创作", state: .allowed),
+                .init(title: "信件引用", state: .confirm),
+                .init(title: "剧情代入", state: .allowed),
+                .init(title: "永久关系", state: .confirm)
+            ]
         )
     ]
 }

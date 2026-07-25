@@ -32,20 +32,11 @@ struct PublicProjectView: View {
     }
 
     private var exitButton: some View {
-        Button {
+        AtlasGlobalBackButton(help: "退出企划详情") {
             withAnimation(.easeInOut(duration: 0.32)) {
                 model.navigate(to: .discover)
             }
-        } label: {
-            Image(systemName: "chevron.left")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(AtlasColor.textPrimary)
-                .frame(width: 44, height: 44)
-                .contentShape(Circle())
-                .atlasP1Glass(Circle(), interactive: true)
         }
-        .buttonStyle(.plain)
-        .help("退出企划详情")
     }
 
     private var hero: some View {
@@ -350,7 +341,8 @@ struct PublicProjectView: View {
             ) {
                 ForEach(PublicCharacter.samples) { character in
                     Button {
-                        model.showToast("已打开 \(character.name) 的角色档案")
+                        model.selectedCharacterID = character.profileID
+                        model.activeSheet = .characterCard
                     } label: {
                         PublicCharacterPortrait(
                             seed: character.seed,
@@ -614,16 +606,17 @@ private struct MiniWorldStrip: View {
 
 private struct PublicCharacter: Identifiable {
     let id: Int
+    let profileID: String
     let name: String
     let role: String
     let location: String
     let seed: Int
 
     static let samples = [
-        PublicCharacter(id: 1, name: "岑", role: "档案修复师", location: "雾港", seed: 1),
-        PublicCharacter(id: 2, name: "伊莱", role: "领航员", location: "白塔", seed: 2),
-        PublicCharacter(id: 3, name: "白昼", role: "外来调查者", location: "第七码头", seed: 3),
-        PublicCharacter(id: 4, name: "阿芙拉", role: "雾海信使", location: "北岸", seed: 4)
+        PublicCharacter(id: 1, profileID: "char-cen", name: "岑", role: "档案修复师", location: "雾港", seed: 1),
+        PublicCharacter(id: 2, profileID: "char-elai", name: "伊莱", role: "领航员", location: "白塔", seed: 2),
+        PublicCharacter(id: 3, profileID: "char-daylight", name: "白昼", role: "外来调查者", location: "第七码头", seed: 3),
+        PublicCharacter(id: 4, profileID: "char-afra", name: "阿芙拉", role: "雾海信使", location: "北岸", seed: 4)
     ]
 }
 

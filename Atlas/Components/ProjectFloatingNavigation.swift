@@ -1,5 +1,24 @@
 import SwiftUI
 
+struct AtlasGlobalBackButton: View {
+    var help: String
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AtlasColor.textPrimary)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+                .atlasP1Glass(Circle(), interactive: true)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .help(help)
+    }
+}
+
 /// 星图不显示品牌字标，但保留与完整 Dock 相同的 7pt 内边距，
 /// 因而头像在所有页面拥有完全一致的屏幕坐标。
 struct ProfileAvatarDock: View {

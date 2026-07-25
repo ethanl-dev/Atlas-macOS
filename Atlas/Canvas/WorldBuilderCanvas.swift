@@ -164,6 +164,12 @@ struct WorldBuilderCanvas: View {
         .overlay(alignment: .leading) { sessionRail.zIndex(25) }
         .overlay(alignment: .bottom) { commandBar.zIndex(30) }
         .overlay(alignment: .top) { topBar.zIndex(60) }
+        .overlay(alignment: .topLeading) {
+            AtlasGlobalBackButton(help: "退出画布", action: onExit)
+                .padding(.top, 24)
+                .padding(.leading, 24)
+                .zIndex(70)
+        }
         .overlay { worldNameEditorOverlay.zIndex(90) }
         .overlay { mapEditorOverlay }
         .background(Color(red: 0.035, green: 0.035, blue: 0.043))
@@ -654,18 +660,6 @@ struct WorldBuilderCanvas: View {
 
     private var topBarTitleGroup: some View {
         HStack(spacing: AtlasSpacing.m) {
-            Button { onExit() } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(width: 44, height: 44)
-                    .contentShape(Circle())
-                    .atlasP1Glass(Circle(), interactive: true)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(AtlasColor.textPrimary)
-            .contentShape(Circle())
-            .help("退出画布")
-
             VStack(alignment: .leading, spacing: 1) {
                 HStack(alignment: .firstTextBaseline, spacing: AtlasSpacing.s) {
                     Text(store.worldName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未命名世界" : store.worldName)
