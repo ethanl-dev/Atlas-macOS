@@ -2220,6 +2220,9 @@ struct WorldBuilderCanvas: View {
                 appendSession(.research, title: "检索词已规划", body: proposal.searchQueries.map { "\"\($0)\"" }.joined(separator: " · "))
                 appendSession(.research, title: "已找到公开资料", body: "从 \(Set(proposal.cards.map { $0.source.provider }).joined(separator: "、")) 找到 \(proposal.cards.count) 条可用资料。")
                 AgentTelemetry.track("agent_inspiration_sources_loaded", properties: ["domain": proposal.domain.rawValue, "count": "\(proposal.cards.count)"])
+                if let fallbackReason = proposal.modelFallbackReason {
+                    appendSession(.verify, title: "模型转译已降级", body: fallbackReason)
+                }
                 appendSession(.verify, title: "来源核验完成", body: "每条灵感都绑定了可打开的原始资料链接。")
                 AgentTelemetry.track("agent_inspiration_sources_verified", properties: ["domain": proposal.domain.rawValue, "count": "\(proposal.cards.count)"])
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.84)) { inspirationProposal = proposal }

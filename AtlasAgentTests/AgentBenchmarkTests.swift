@@ -51,6 +51,31 @@ final class AgentBenchmarkTests: XCTestCase {
         XCTAssertEqual(names, ["propose_cards"])
     }
 
+    func testForcedToolChoiceDisablesDeepSeekThinkingMode() {
+        let forcedChoice: [String: Any] = [
+            "type": "function",
+            "function": ["name": "propose_cards"]
+        ]
+        let body = DeepSeekClient.makeRequestBody(
+            messages: [["role": "user", "content": "test"]],
+            tools: AgentToolSchema.creationTools(),
+            toolChoice: forcedChoice
+        )
+        let thinking = body["thinking"] as? [String: String]
+        XCTAssertEqual(thinking?["type"], "disabled")
+        XCTAssertNotNil(body["tool_choice"])
+    }
+
+    func testAutomaticToolChoiceKeepsDefaultThinkingMode() {
+        let body = DeepSeekClient.makeRequestBody(
+            messages: [["role": "user", "content": "test"]],
+            tools: AgentToolSchema.tools(),
+            toolChoice: nil
+        )
+        XCTAssertNil(body["thinking"])
+        XCTAssertEqual(body["tool_choice"] as? String, "auto")
+    }
+
     // MARK: 灵感 / 来源核验 Skill
 
     func testResearchDomainClassification() {
@@ -240,6 +265,215 @@ final class AgentBenchmarkTests: XCTestCase {
             DeepSeekClient.containsChinese($0.title)
                 && DeepSeekClient.containsChinese($0.fact)
                 && DeepSeekClient.containsChinese($0.creativeAngle)
+        })
+    }
+
+    /// 端到端验证《哈利·波特与魔法石》演示稿中的长提示词。
+    /// 默认跳过，避免普通单测重复消耗模型与公开资料源配额。
+    @MainActor
+    func testLiveHarryPotterDemoPrompts() async throws {
+        guard UserDefaults.standard.bool(forKey: "atlas.agent.runDemoPromptTests") else {
+            throw XCTSkip("Enable atlas.agent.runDemoPromptTests to run the demo prompt acceptance test.")
+        }
+        guard AgentConfig.isConfigured else {
+            throw XCTSkip("Configure DEEPSEEK_API_KEY to run the demo prompt acceptance test.")
+        }
+
+        let client = DeepSeekClient()
+        let emptySnapshot = "对象：\n（空）\n关系：\n（无）"
+        let fullCreationPrompt = """
+        请根据下面明确列出的对象，提出一批待采纳的画布卡片草稿。每一条只创建一张卡；只使用我提供的名称和说明，不要补写新的设定。
+
+        地图｜霍格沃茨校园图｜用于承载霍格沃茨城堡、禁林和校内重要区域的世界地图。
+
+        地点｜霍格沃茨城堡｜英国魔法学校的主体建筑，包含大礼堂、会移动的楼梯、宿舍和许多隐藏房间。
+        地点｜九又四分之三站台｜隐藏在伦敦国王十字车站内，学生从这里乘坐霍格沃茨特快列车。
+        地点｜禁林｜霍格沃茨边界内禁止学生擅自进入的森林，生活着多种魔法生物。
+
+        角色｜哈利·波特｜在麻瓜家庭长大的孤儿，十一岁时得知自己是巫师，并进入霍格沃茨学习。
+        角色｜赫敏·格兰杰｜出身麻瓜家庭、重视规则与知识的一年级学生，是哈利和罗恩的重要伙伴。
+        角色｜罗恩·韦斯莱｜来自巫师家庭的一年级学生，在魔法棋与巫师社会常识方面帮助哈利。
+        角色｜奇洛教授｜霍格沃茨黑魔法防御术教授，表面胆怯，实际试图帮助伏地魔取得魔法石。
+
+        组织｜格兰芬多学院｜霍格沃茨四大学院之一，重视勇气、胆识与担当。
+        组织｜斯莱特林学院｜霍格沃茨四大学院之一，重视野心、谋略与血统传统。
+
+        规则｜魔杖与咒语规则｜施法通常需要魔杖、咒语、动作与施法者意志共同完成；不同魔杖与使用者之间存在适配差异。
+
+        事件｜万圣节巨怪事件｜万圣节夜晚巨怪进入霍格沃茨，哈利和罗恩前往女盥洗室救下赫敏，三人由此成为朋友。
+        事件｜厄里斯魔镜前的对决｜哈利通过一系列防护机关抵达厄里斯魔镜前，发现奇洛试图为伏地魔夺取魔法石。
+
+        物件｜魔法石｜由炼金术士尼可·勒梅制造，能够将金属变成黄金并用于炼制长生不老药。
+
+        作品｜霍格沃茨录取通知书｜寄给哈利的入学信件，第一次明确告诉他巫师身份和入学安排。
+
+        便签｜魔法石谜题线索｜三头犬、古灵阁被闯入、尼可·勒梅和厄里斯魔镜共同指向被隐藏的魔法石。
+        """
+        let fullCreation = try await client.parseCanvasIntent(
+            instruction: fullCreationPrompt,
+            snapshot: emptySnapshot
+        )
+        let expectedFullNames = Set([
+            "霍格沃茨校园图", "霍格沃茨城堡", "九又四分之三站台", "禁林",
+            "哈利·波特", "赫敏·格兰杰", "罗恩·韦斯莱", "奇洛教授",
+            "格兰芬多学院", "斯莱特林学院", "魔杖与咒语规则",
+            "万圣节巨怪事件", "厄里斯魔镜前的对决", "魔法石",
+            "霍格沃茨录取通知书", "魔法石谜题线索"
+        ])
+        XCTAssertEqual(fullCreation.drafts.count, 16)
+        XCTAssertEqual(Set(fullCreation.drafts.map(\.name)), expectedFullNames)
+        XCTAssertEqual(
+            Dictionary(grouping: fullCreation.drafts, by: \.kind.rawValue).mapValues(\.count),
+            [
+                "map": 1, "location": 3, "character": 4, "org": 2, "rule": 1,
+                "event": 2, "item": 1, "work": 1, "note": 1
+            ]
+        )
+
+        let quickCreationPrompt = """
+        请提出四张待采纳卡片草稿，只使用以下内容，不要扩写：
+        地点｜霍格沃茨城堡｜英国魔法学校的主体建筑。
+        角色｜哈利·波特｜十一岁时得知自己是巫师并进入霍格沃茨学习。
+        组织｜格兰芬多学院｜重视勇气、胆识与担当的学院。
+        事件｜厄里斯魔镜前的对决｜哈利在厄里斯魔镜前阻止奇洛夺取魔法石。
+        """
+        let quickCreation = try await client.parseCanvasIntent(
+            instruction: quickCreationPrompt,
+            snapshot: emptySnapshot
+        )
+        XCTAssertEqual(quickCreation.drafts.count, 4)
+        XCTAssertEqual(
+            Set(quickCreation.drafts.map(\.name)),
+            Set(["霍格沃茨城堡", "哈利·波特", "格兰芬多学院", "厄里斯魔镜前的对决"])
+        )
+
+        let demoSnapshot = """
+        对象：
+        - map-campus · 地图 · 霍格沃茨校园图
+        - loc-castle · 地点 · 霍格沃茨城堡
+        - loc-platform · 地点 · 九又四分之三站台
+        - loc-forest · 地点 · 禁林
+        - chr-harry · 角色 · 哈利·波特
+        - chr-hermione · 角色 · 赫敏·格兰杰
+        - chr-ron · 角色 · 罗恩·韦斯莱
+        - chr-quirrell · 角色 · 奇洛教授
+        - org-gryffindor · 组织 · 格兰芬多学院
+        - org-slytherin · 组织 · 斯莱特林学院
+        - rule-wand · 规则 · 魔杖与咒语规则
+        - evt-troll · 事件 · 万圣节巨怪事件
+        - evt-mirror · 事件 · 厄里斯魔镜前的对决
+        - item-stone · 物件 · 魔法石
+        - work-letter · 作品 · 霍格沃茨录取通知书
+        - note-clues · 便签 · 魔法石谜题线索
+        关系：
+        （无）
+        """
+        let layoutPrompt = "按对象类型整理整个画布，让地图、地点、角色、组织、规则、事件、物件、作品和便签形成清楚的分列。只调整卡片位置，不修改任何名称、摘要或其他正文。"
+        let layout = try await client.organize(instruction: layoutPrompt, snapshot: demoSnapshot)
+        XCTAssertTrue(layout.actions.contains {
+            if case .arrange(let strategy) = $0 { return strategy == "by_type" }
+            return false
+        })
+        XCTAssertFalse(layout.actions.contains {
+            if case .link = $0 { return true }
+            if case .unlink = $0 { return true }
+            return false
+        })
+
+        let firstRelationsPrompt = """
+        请提出以下关系并生成预览：
+        哈利·波特连接格兰芬多学院，关系标签为“成员”，强度为深。
+        赫敏·格兰杰连接格兰芬多学院，关系标签为“成员”，强度为深。
+        罗恩·韦斯莱连接格兰芬多学院，关系标签为“成员”，强度为深。
+        哈利·波特连接罗恩·韦斯莱，关系标签为“盟友”，强度为深。
+        哈利·波特连接赫敏·格兰杰，关系标签为“盟友”，强度为深。
+        奇洛教授连接哈利·波特，关系标签为“隐藏敌对”，强度为深。
+        只建立这些关系，不修改卡片正文，也不要新增对象。
+        """
+        let firstRelations = try await client.organize(
+            instruction: firstRelationsPrompt,
+            snapshot: demoSnapshot
+        )
+        XCTAssertEqual(
+            linkSignatures(firstRelations.actions),
+            Set([
+                "chr-harry|org-gryffindor|成员|strong",
+                "chr-hermione|org-gryffindor|成员|strong",
+                "chr-ron|org-gryffindor|成员|strong",
+                "chr-harry|chr-ron|盟友|strong",
+                "chr-harry|chr-hermione|盟友|strong",
+                "chr-quirrell|chr-harry|隐藏敌对|strong"
+            ])
+        )
+
+        let secondRelationsPrompt = """
+        请提出以下关系并生成预览：
+        万圣节巨怪事件连接霍格沃茨城堡，关系标签为“发生于”，强度为常。
+        万圣节巨怪事件连接赫敏·格兰杰，关系标签为“涉及”，强度为深。
+        万圣节巨怪事件连接罗恩·韦斯莱，关系标签为“涉及”，强度为深。
+        厄里斯魔镜前的对决连接哈利·波特，关系标签为“涉及”，强度为深。
+        厄里斯魔镜前的对决连接奇洛教授，关系标签为“涉及”，强度为深。
+        魔法石连接厄里斯魔镜前的对决，关系标签为“核心目标”，强度为深。
+        只建立这些关系，不修改卡片正文，也不要新增对象。
+        """
+        let secondRelations = try await client.organize(
+            instruction: secondRelationsPrompt,
+            snapshot: demoSnapshot
+        )
+        XCTAssertEqual(
+            linkSignatures(secondRelations.actions),
+            Set([
+                "evt-troll|loc-castle|发生于|medium",
+                "evt-troll|chr-hermione|涉及|strong",
+                "evt-troll|chr-ron|涉及|strong",
+                "evt-mirror|chr-harry|涉及|strong",
+                "evt-mirror|chr-quirrell|涉及|strong",
+                "item-stone|evt-mirror|核心目标|strong"
+            ])
+        )
+
+        let quickOrganizePrompt = "按类型整理画布，并把哈利·波特、格兰芬多学院和厄里斯魔镜前的对决聚拢到一起；只调整布局，不修改任何卡片正文。"
+        let quickOrganize = try await client.organize(
+            instruction: quickOrganizePrompt,
+            snapshot: demoSnapshot
+        )
+        XCTAssertTrue(quickOrganize.actions.contains {
+            if case .arrange(let strategy) = $0 { return strategy == "by_type" }
+            return false
+        })
+        XCTAssertTrue(quickOrganize.actions.contains {
+            if case .cluster(let ids, _) = $0 {
+                return Set(ids) == Set(["chr-harry", "org-gryffindor", "evt-mirror"])
+            }
+            return false
+        })
+
+        let researchPrompts = [
+            "查找关于极光与地磁活动的可核验自然资料，为“霍格沃茨大礼堂会呈现外部天空的魔法天花板”提供视觉和规则参考。每条都要附可打开的原始资料来源，把资料事实和创作追问分开；只递出资料参照与开放问题，不要改写《魔法石》的既有设定。",
+            "查找关于火山闪电的可核验自然资料，为“魔法学校上空可能出现的异常天象”提供视觉参考。每条附原始来源，只给资料参照和开放问题，不改写原著设定。",
+            "查找历史上的粮食危机与配给记录，为“寄宿学校在长期封锁下如何维持食物供应”提供资料参考。每条附原始来源，只给资料参照和开放问题，不改写原著设定。",
+            "查找关于极光的可核验自然资料，为霍格沃茨大礼堂的魔法天花板提供视觉参考。每条附原始来源，只给资料参照和开放问题，不改写原著设定。"
+        ]
+        for prompt in researchPrompts {
+            let proposal = try await InspirationResearchService().research(query: prompt)
+            XCTAssertNil(proposal.modelFallbackReason, proposal.modelFallbackReason ?? "")
+            XCTAssertFalse(proposal.cards.isEmpty)
+            XCTAssertLessThanOrEqual(proposal.cards.count, 3)
+            XCTAssertTrue(proposal.cards.allSatisfy {
+                $0.source.url.scheme == "https"
+                    && DeepSeekClient.containsChinese($0.title)
+                    && DeepSeekClient.containsChinese($0.fact)
+                    && DeepSeekClient.containsChinese($0.creativeAngle)
+            })
+        }
+    }
+
+    private func linkSignatures(_ actions: [AgentAction]) -> Set<String> {
+        Set(actions.compactMap { action in
+            guard case .link(let source, let target, let relation, _, let strength) = action else {
+                return nil
+            }
+            return "\(source)|\(target)|\(relation ?? "")|\(strength ?? "medium")"
         })
     }
 

@@ -40,6 +40,7 @@ struct DeepSeekClient {
     2. 你只能通过给定的工具来动作：重新排布、聚拢卡片、移动卡片、在对象间建立/移除关系。
     3. 你不"生成设定"，只"整理已存在的东西"。若作者的话涉及角色关系（如"把艾琳娜和森林议会连起来"），用 link_objects 提议关系并给出简短类别。
     4. 一次尽量用最少的工具调用达成目标。整理整块画布优先用 arrange_canvas。
+       但作者提出复合目标时必须逐项完成，不能为了减少调用而遗漏其中一项。例如“按类型整理画布，并把 A、B、C 聚拢”必须在同一次响应中先调用 arrange_canvas，再调用 cluster_cards。
     5. 所有动作都是"提议"，最终由作者采纳。不要啰嗦解释，直接调用工具。
     6. assistantText 只写简洁、克制的中文说明：不用 emoji，不用 Markdown 标题，不用加粗符号，不复述工具清单，不使用“已为你”“以下是”“方案已提交”等汇报腔。最多 3 句。
 
@@ -260,18 +261,11 @@ struct DeepSeekClient {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(AgentConfig.apiKey)", forHTTPHeaderField: "Authorization")
 
-        var body: [String: Any] = [
-            "model": AgentConfig.model,
-            "messages": messages,
-            "tools": tools,
-            "temperature": 0.2,
-            "stream": false
-        ]
-        if let toolChoice {
-            body["tool_choice"] = toolChoice
-        } else {
-            body["tool_choice"] = "auto"
-        }
+        let body = Self.makeRequestBody(
+            messages: messages,
+            tools: tools,
+            toolChoice: toolChoice
+        )
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let data: Data
@@ -292,5 +286,30 @@ struct DeepSeekClient {
             throw DeepSeekError.badResponse
         }
         return message
+    }
+
+    /// DeepSeek V4 defaults to thinking mode. Thinking mode supports automatic
+    /// tool use, but rejects a forced named `tool_choice`. Creation and
+    /// inspiration calls deliberately force a schema tool, so those requests
+    /// must use non-thinking mode to keep their structured-output contract.
+    static func makeRequestBody(
+        messages: [[String: Any]],
+        tools: [[String: Any]],
+        toolChoice: [String: Any]?
+    ) -> [String: Any] {
+        var body: [String: Any] = [
+            "model": AgentConfig.model,
+            "messages": messages,
+            "tools": tools,
+            "temperature": 0.2,
+            "stream": false
+        ]
+        if let toolChoice {
+            body["tool_choice"] = toolChoice
+            body["thinking"] = ["type": "disabled"]
+        } else {
+            body["tool_choice"] = "auto"
+        }
+        return body
     }
 }

@@ -37,6 +37,7 @@ struct InspirationResearchProposal {
     let domain: InspirationDomain
     let searchQueries: [String]
     let cards: [InspirationCard]
+    let modelFallbackReason: String?
     let duration: TimeInterval
 }
 
@@ -71,27 +72,37 @@ struct InspirationResearchService {
         guard !sources.isEmpty else { throw InspirationResearchError.noSources }
 
         let cards: [InspirationCard]
+        let modelFallbackReason: String?
         if useModel && AgentConfig.isConfigured {
             do {
                 let proposed = try await DeepSeekClient().proposeInspirations(query: query, sources: sources)
                 cards = Self.cardsUsingVerifiedFallback(proposed, sources: sources)
                 if proposed.isEmpty {
+                    modelFallbackReason = "模型返回的资料卡未通过来源与格式校验，已显示来源保底摘要。"
                     AgentTelemetry.track(
                         "agent_inspiration_model_fallback",
                         properties: ["domain": domain.rawValue, "reason": "empty_cards"]
                     )
+                } else {
+                    modelFallbackReason = nil
                 }
             } catch {
-                AgentTelemetry.track("agent_inspiration_model_fallback", properties: ["domain": domain.rawValue])
+                modelFallbackReason = "模型转译失败：\(error.localizedDescription) 已显示来源保底摘要。"
+                AgentTelemetry.track(
+                    "agent_inspiration_model_fallback",
+                    properties: ["domain": domain.rawValue, "reason": Self.fallbackReasonCode(error)]
+                )
                 cards = Self.localCards(from: sources)
             }
         } else {
             cards = Self.localCards(from: sources)
+            modelFallbackReason = useModel ? "AI 未连接，已显示来源保底摘要。" : nil
         }
         return InspirationResearchProposal(
             domain: domain,
             searchQueries: searchQueries,
             cards: cards,
+            modelFallbackReason: modelFallbackReason,
             duration: Date().timeIntervalSince(startedAt)
         )
     }
@@ -301,6 +312,16 @@ struct InspirationResearchService {
     }
 
     private static func contains(_ text: String, _ words: [String]) -> Bool { words.contains { text.contains($0) } }
+
+    private static func fallbackReasonCode(_ error: Error) -> String {
+        switch error {
+        case DeepSeekError.notConfigured: return "not_configured"
+        case DeepSeekError.timedOut: return "timed_out"
+        case DeepSeekError.http: return "http_error"
+        case DeepSeekError.badResponse: return "bad_response"
+        default: return "unknown"
+        }
+    }
 
     private static func natureTerms(in text: String) -> [String] {
         let mapping = [
